@@ -1,7 +1,8 @@
+import { Zone } from "../../zone/entities/zone.entity";
 import { BaseEntity } from "../../entities/base.entity";
 import { UserInterface } from "../../interfaces/user.interface";
 import { Role } from "../../role/entities/role.entity";
-import { Column, Entity, ManyToOne } from "typeorm";
+import { Column, Entity, JoinTable, ManyToMany, ManyToOne } from "typeorm";
 
 @Entity('user')
 export class User extends BaseEntity implements UserInterface{
@@ -27,4 +28,8 @@ export class User extends BaseEntity implements UserInterface{
         length: 255,
     })
     password: string;
+
+    @ManyToMany(()=> Zone)
+    @JoinTable()
+    zones: Zone[];
 }

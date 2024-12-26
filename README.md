@@ -26,10 +26,29 @@
 
 [Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
 
+## Requirements
+
+- Node.js >= 20.0.0
+- yarn >= 1.22.0
+- typeorm >= 0.3.11
+- pg >= 8.13.1
+- typescript >= 5.1.3
+
 ## Project setup
 
 ```bash
 $ yarn install
+```
+
+## Generate migration from datasource automatically
+
+```bash
+$ yarn run migration:generate
+```
+## Run migration
+
+```bash
+$ yarn run migration:run
 ```
 
 ## Compile and run the project

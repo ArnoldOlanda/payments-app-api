@@ -4,6 +4,8 @@ import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { dataSource } from './config/data-source';
 import { RoleModule } from './role/role.module';
+import { ZoneModule } from './zone/zone.module';
+import { CustomerModule } from './customer/customer.module';
 
 
 @Module({
@@ -13,7 +15,7 @@ import { RoleModule } from './role/role.module';
       isGlobal: true,
     }),
     TypeOrmModule.forRoot(dataSource), 
-    UserModule, RoleModule
+    UserModule, RoleModule, ZoneModule, CustomerModule
   ],
   controllers: [],
   providers: [],
