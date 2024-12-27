@@ -6,9 +6,11 @@ import {
   DeleteDateColumn,
   Entity,
   ManyToOne,
+  OneToMany,
   UpdateDateColumn,
 } from 'typeorm';
 import { Zone } from 'src/zone/entities/zone.entity';
+import { Account } from 'src/account/entities/account.entity';
 
 @Entity('customer')
 export class Customer extends BaseEntity implements CustomerInterface {
@@ -33,6 +35,9 @@ export class Customer extends BaseEntity implements CustomerInterface {
 
     @ManyToOne(() => Zone, (zone) => zone.customers)
     zone: Zone;
+
+    @OneToMany(()=>Account, (account)=>account.customer)
+    accounts: Account[];
 
     @CreateDateColumn({ select: false })
     createdAt: Date;

@@ -6,6 +6,9 @@ import { dataSource } from './config/data-source';
 import { RoleModule } from './role/role.module';
 import { ZoneModule } from './zone/zone.module';
 import { CustomerModule } from './customer/customer.module';
+import { AccountModule } from './account/account.module';
+import { CreditTypeModule } from './credit-type/credit-type.module';
+import { PaymentModule } from './payment/payment.module';
 
 
 @Module({
@@ -15,7 +18,7 @@ import { CustomerModule } from './customer/customer.module';
       isGlobal: true,
     }),
     TypeOrmModule.forRoot(dataSource), 
-    UserModule, RoleModule, ZoneModule, CustomerModule
+    UserModule, RoleModule, ZoneModule, CustomerModule, AccountModule, CreditTypeModule, PaymentModule
   ],
   controllers: [],
   providers: [],
