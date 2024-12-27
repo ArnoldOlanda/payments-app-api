@@ -13,7 +13,7 @@ import { Zone } from 'src/zone/entities/zone.entity';
 @Entity('customer')
 export class Customer extends BaseEntity implements CustomerInterface {
 
-    @Column({ type: 'varchar', length: 10 })
+    @Column({ type: 'varchar', length: 10, unique: true })
     documentNumber: string;
 
     @Column({ type: 'varchar', length: 100 })
@@ -22,13 +22,13 @@ export class Customer extends BaseEntity implements CustomerInterface {
     @Column({ type: 'varchar', length: 100 })
     lastName: string;
 
-    @Column({ type: 'varchar', length: 100 })
+    @Column({ type: 'varchar', length: 100, nullable: true })
     address: string;
 
-    @Column({ type: 'varchar', length: 15 })
+    @Column({ type: 'varchar', length: 15, nullable: true })
     phone: string;
 
-    @Column({ type: 'varchar', length: 50 })
+    @Column({ type: 'varchar', length: 50, nullable: true, unique: true })
     email: string;
 
     @ManyToOne(() => Zone, (zone) => zone.customers)
