@@ -1,26 +1,53 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { CreateZoneDto } from './dto/create-zone.dto';
 import { UpdateZoneDto } from './dto/update-zone.dto';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Zone } from './entities/zone.entity';
+import { Repository } from 'typeorm';
 
 @Injectable()
 export class ZoneService {
+
+  constructor(
+    @InjectRepository(Zone)
+    private readonly zoneRepository: Repository<Zone>,
+  ) {}
+
   create(createZoneDto: CreateZoneDto) {
-    return 'This action adds a new zone';
+    return this.zoneRepository.save(createZoneDto);
   }
 
   findAll() {
-    return `This action returns all zone`;
+    return this.zoneRepository.find();
   }
 
-  findOne(id: number) {
-    return `This action returns a #${id} zone`;
+  async findOne(id: string) {
+    const zone = await this.zoneRepository.findOne({where: {id}});
+    if(!zone) {
+      throw new NotFoundException(`Zone with id ${id} not found`);
+    }
+
+    return this.zoneRepository.findOne({where: {id}});
   }
 
-  update(id: number, updateZoneDto: UpdateZoneDto) {
-    return `This action updates a #${id} zone`;
+  async update(id: string, updateZoneDto: UpdateZoneDto) {
+    const zone = await this.zoneRepository.preload({
+      id,
+      ...updateZoneDto
+    });
+
+    if (!zone) {
+      throw new NotFoundException(`Zone with id ${id} not found`);
+    }
+    return this.zoneRepository.save(zone);
   }
 
-  remove(id: number) {
-    return `This action removes a #${id} zone`;
+  async remove(id: string) {
+    const zone = await this.zoneRepository.findOne({where: {id}});
+    if (!zone) {
+      throw new NotFoundException('Zone with id ${id} not found');
+    }
+    await this.zoneRepository.softDelete(id);
+    return 'Zone deleted successfully';
   }
 }

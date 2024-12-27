@@ -1,26 +1,84 @@
-import { Injectable } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { InjectRepository } from '@nestjs/typeorm';
+import { User } from './entities/user.entity';
+import { Repository } from 'typeorm';
+import { Role } from 'src/role/entities/role.entity';
+import { encryptPassword } from 'src/helpers/encryptPassword';
 
 @Injectable()
 export class UserService {
-  create(createUserDto: CreateUserDto) {
-    return 'This action adds a new user';
+  
+  constructor(
+    @InjectRepository(User) 
+    private readonly userRepository: Repository<User>,
+    @InjectRepository(Role)
+    private readonly roleRepository: Repository<Role>,
+  ) {}
+
+  async create(createUserDto: CreateUserDto) {
+
+    try {
+      const role = await this.roleRepository.findOne({where: {id: createUserDto.role_id}});
+    
+      if (!role) {
+        throw new NotFoundException('Role not found');
+      }
+
+      const user = this.userRepository.create({
+        ...createUserDto,
+        role,
+        password: encryptPassword(createUserDto.password)
+      });
+      
+      const savedUser = await this.userRepository.save(user);
+      return savedUser;
+    } catch (error:any) {
+      if(error.code === '23505') {
+        throw new ConflictException('Email already exists');
+      }
+      throw error;
+    }
   }
 
   findAll() {
-    return `This action returns all user`;
+    return this.userRepository.find();
   }
 
-  findOne(id: number) {
-    return `This action returns a #${id} user`;
+  async findOne(id: string) {
+
+    const user = await this.userRepository.findOne({where: {id}});
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    return this.userRepository.findOne({where: {id}});
   }
 
-  update(id: number, updateUserDto: UpdateUserDto) {
-    return `This action updates a #${id} user`;
+  async update(id: string, updateUserDto: UpdateUserDto) {
+    const role = await this.roleRepository.preload({
+      id,
+      ...updateUserDto
+    });
+
+    if (!role) {
+      throw new NotFoundException('Role not found');
+    }
+    
+    return this.userRepository.save(updateUserDto);
   }
 
-  remove(id: number) {
-    return `This action removes a #${id} user`;
+  async remove(id: string) {
+    const user = await this.userRepository.findOne({where: {id}});
+    
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    await this.userRepository.softDelete(id);
+
+    return 'User deleted successfully';
   }
 }

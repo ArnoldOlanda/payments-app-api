@@ -1,7 +1,7 @@
 import { BaseEntity } from "../../entities/base.entity";
 import { RoleInterface } from "../../interfaces/role.interface";
 import { User } from "../../user/entities/user.entity";
-import { Column, Entity, OneToMany } from "typeorm";
+import { Column, CreateDateColumn, DeleteDateColumn, Entity, OneToMany, UpdateDateColumn } from "typeorm";
 
 @Entity('role')
 export class Role extends BaseEntity implements RoleInterface{
@@ -11,12 +11,15 @@ export class Role extends BaseEntity implements RoleInterface{
     })
     name: string;
 
-    @Column({
-        type: 'varchar',
-        length: 100,
-    })
-    description: string;
-
-    @OneToMany(() => User, (user) => user.role_id)
+    @OneToMany(() => User, (user) => user.role)
     users: User[];
+
+    @CreateDateColumn({ select: false })
+    createdAt: Date;
+
+    @UpdateDateColumn({ select: false })
+    updatedAt: Date;
+
+    @DeleteDateColumn({ select: false })
+    deletedAt: Date;
 }

@@ -19,16 +19,16 @@ export class ZoneController {
 
   @Get(':id')
   findOne(@Param('id') id: string) {
-    return this.zoneService.findOne(+id);
+    return this.zoneService.findOne(id);
   }
 
   @Patch(':id')
   update(@Param('id') id: string, @Body() updateZoneDto: UpdateZoneDto) {
-    return this.zoneService.update(+id, updateZoneDto);
+    return this.zoneService.update(id, updateZoneDto);
   }
 
   @Delete(':id')
   remove(@Param('id') id: string) {
-    return this.zoneService.remove(+id);
+    return this.zoneService.remove(id);
   }
 }

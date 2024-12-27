@@ -1,26 +1,55 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { CreateRoleDto } from './dto/create-role.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Role } from './entities/role.entity';
+import { Repository } from 'typeorm';
 
 @Injectable()
 export class RoleService {
+
+  constructor(
+    @InjectRepository(Role)
+    private readonly roleRepository: Repository<Role>,
+  ) {}
+
   create(createRoleDto: CreateRoleDto) {
-    return 'This action adds a new role';
+    return this.roleRepository.save(createRoleDto);
   }
 
   findAll() {
-    return `This action returns all role`;
+    return this.roleRepository.find();
   }
 
-  findOne(id: number) {
-    return `This action returns a #${id} role`;
+  async findOne(id: string) {
+    const role = await this.roleRepository.findOne({where: {id}});
+  
+    if (!role) {
+      throw new NotFoundException('Role not found');
+    }
+    
+    return this.roleRepository.findOne({where: {id}});
   }
 
-  update(id: number, updateRoleDto: UpdateRoleDto) {
-    return `This action updates a #${id} role`;
+  async update(id: string, updateRoleDto: UpdateRoleDto) {
+    const role = await this.roleRepository.preload({
+      id,
+      ...updateRoleDto
+    });
+
+    if (!role) {
+      throw new NotFoundException('Role not found');
+    }
+
+    return this.roleRepository.save(role);
   }
 
-  remove(id: number) {
-    return `This action removes a #${id} role`;
+  async remove(id: string) {
+    const role = await this.roleRepository.findOne({where: {id}});
+    if (!role) {
+      throw new NotFoundException('Role not found');
+    }
+    await this.roleRepository.softDelete(id);
+    return 'Role deleted successfully';
   }
 }

@@ -1,9 +1,8 @@
 export interface CustomerInterface {
     id: string;
-    zone_id: string;
-    document_number: string;
+    documentNumber: string;
     name: string;
-    last_name: string;
+    lastName: string;
     address: string;
     phone: string;
     email: string;
