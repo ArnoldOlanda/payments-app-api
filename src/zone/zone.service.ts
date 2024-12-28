@@ -27,7 +27,7 @@ export class ZoneService {
       throw new NotFoundException(`Zone with id ${id} not found`);
     }
 
-    return this.zoneRepository.findOne({where: {id}});
+    return zone;
   }
 
   async update(id: string, updateZoneDto: UpdateZoneDto) {
@@ -43,11 +43,15 @@ export class ZoneService {
   }
 
   async remove(id: string) {
-    const zone = await this.zoneRepository.findOne({where: {id}});
-    if (!zone) {
-      throw new NotFoundException('Zone with id ${id} not found');
+    try {
+      await this.findOne(id);
+      await this.zoneRepository.softDelete(id);
+      return 'Zone deleted successfully';
+    } catch (error) {
+      if(error instanceof NotFoundException) {
+        throw new NotFoundException(`Zone with id ${id} not found`);
+      }
+      throw error;
     }
-    await this.zoneRepository.softDelete(id);
-    return 'Zone deleted successfully';
   }
 }

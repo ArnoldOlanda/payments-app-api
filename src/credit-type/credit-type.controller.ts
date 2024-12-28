@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, ParseUUIDPipe } from '@nestjs/common';
 import { CreditTypeService } from './credit-type.service';
 import { CreateCreditTypeDto } from './dto/create-credit-type.dto';
 import { UpdateCreditTypeDto } from './dto/update-credit-type.dto';
@@ -18,17 +18,20 @@ export class CreditTypeController {
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.creditTypeService.findOne(+id);
+  findOne(@Param('id', ParseUUIDPipe) id: string) {
+    return this.creditTypeService.findOne(id);
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() updateCreditTypeDto: UpdateCreditTypeDto) {
-    return this.creditTypeService.update(+id, updateCreditTypeDto);
+  update(
+    @Param('id', ParseUUIDPipe) id: string, 
+    @Body() updateCreditTypeDto: UpdateCreditTypeDto
+  ) {
+    return this.creditTypeService.update(id, updateCreditTypeDto);
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.creditTypeService.remove(+id);
+  remove(@Param('id', ParseUUIDPipe) id: string) {
+    return this.creditTypeService.remove(id);
   }
 }
