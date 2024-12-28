@@ -4,6 +4,7 @@ import { UpdateAccountDto } from './dto/update-account.dto';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Account } from './entities/account.entity';
+import { Customer } from 'src/customer/entities/customer.entity';
 
 @Injectable()
 export class AccountService {
@@ -11,12 +12,14 @@ export class AccountService {
   constructor(
     @InjectRepository(Account)
     private readonly accountRepository: Repository<Account>,
+    @InjectRepository(Customer)
+    private readonly customerRepository: Repository<Customer>,
   ) {}
 
   async create(createAccountDto: CreateAccountDto) {
     const { customerId } = createAccountDto;
 
-    const customer = await this.accountRepository.findOne({where: {id: customerId}});
+    const customer = await this.customerRepository.findOne({where: {id: customerId}});
     if(!customer) {
       throw new NotFoundException(`Customer with id ${customerId} not found`);
     }

@@ -18,11 +18,16 @@ export class CustomerService {
 
   async create(createCustomerDto: CreateCustomerDto) {
     try {
-      const zone = await this.zoneRepository.findOne({where: {id: createCustomerDto.zone_id}});
-      
+      let zone = null;
+      if (createCustomerDto.zone_id) {
+        zone = await this.zoneRepository.findOne({ where: { id: createCustomerDto.zone_id } });
+        if (!zone) {
+          throw new NotFoundException(`Zone with id ${createCustomerDto.zone_id} not found`);
+        }
+      }
       const customer = this.customerRepository.create({
         ...createCustomerDto,
-        zone: zone ?? null
+        zone
       })
 
       const savedCustomer = await this.customerRepository.save(customer);
@@ -36,7 +41,7 @@ export class CustomerService {
   }
 
   findAll() {
-    return this.customerRepository.find();
+    return this.customerRepository.find({relations: ['zone']});
   }
 
   async findOne(id: string) {

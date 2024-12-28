@@ -3,9 +3,10 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { InjectRepository } from '@nestjs/typeorm';
 import { User } from './entities/user.entity';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { Role } from 'src/role/entities/role.entity';
 import { encryptPassword } from 'src/helpers/encryptPassword';
+import { Zone } from 'src/zone/entities/zone.entity';
 
 @Injectable()
 export class UserService {
@@ -15,6 +16,8 @@ export class UserService {
     private readonly userRepository: Repository<User>,
     @InjectRepository(Role)
     private readonly roleRepository: Repository<Role>,
+    @InjectRepository(Zone)
+    private readonly zoneRepository: Repository<Zone>,
   ) {}
 
   async create(createUserDto: CreateUserDto) {
@@ -43,7 +46,7 @@ export class UserService {
   }
 
   findAll() {
-    return this.userRepository.find();
+    return this.userRepository.find({relations: ['zones']});
   }
 
   async findOne(id: string) {
@@ -80,5 +83,30 @@ export class UserService {
     await this.userRepository.softDelete(id);
 
     return 'User deleted successfully';
+  }
+
+  async assingZones(userId: string, zoneIds: string[]){
+    const user = await this.userRepository.findOne({
+      where: { id: userId },
+      relations: ['zones'], 
+    });
+  
+    if (!user) {
+      throw new NotFoundException(`User with id ${userId} not found`);
+    }
+  
+    // Validar las zonas
+    const zones = await this.zoneRepository.findBy({id: In(zoneIds)});
+  
+    if (zones.length !== zoneIds.length) {
+      const invalidIds = zoneIds.filter((id) => !zones.find((zone) => zone.id === id));
+      throw new NotFoundException(`Zones with ids ${invalidIds.join(', ')} not found`);
+    }
+  
+    // Asignar las zonas al usuario
+    user.zones = zones;
+  
+    // Guardar cambios
+    return this.userRepository.save(user);
   }
 }

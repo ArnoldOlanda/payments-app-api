@@ -30,7 +30,7 @@ export class User extends BaseEntity implements UserInterface{
     @ManyToOne(() => Role, (role) => role.users,{ eager: true })
     role: Role;
 
-    @ManyToMany(()=> Zone)
+    @ManyToMany(()=> Zone,{cascade: true})
     @JoinTable()
     zones: Zone[];
 
