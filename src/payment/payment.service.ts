@@ -1,26 +1,61 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { UpdatePaymentDto } from './dto/update-payment.dto';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { Payment } from './entities/payment.entity';
 
 @Injectable()
 export class PaymentService {
-  create(createPaymentDto: CreatePaymentDto) {
-    return 'This action adds a new payment';
+
+  constructor(
+    @InjectRepository(Payment)
+    private readonly paymentRepository: Repository<Payment>,
+  ) {}
+
+  async create(createPaymentDto: CreatePaymentDto) {
+
+    const { accountId } = createPaymentDto
+    const account = await this.paymentRepository.findOne({where: {id: accountId}});
+    if(!account) {
+      throw new NotFoundException(`Account with id ${accountId} not found`);
+    }
+
+    const payment = this.paymentRepository.create({
+      ...createPaymentDto,
+      account,
+    });
+
+    return this.paymentRepository.save(payment);
   }
 
   findAll() {
-    return `This action returns all payment`;
+    return this.paymentRepository.find();
   }
 
-  findOne(id: number) {
-    return `This action returns a #${id} payment`;
+  async findOne(id: string) {
+    const payment = await this.paymentRepository.findOne({where: {id}});
+    if(!payment) {
+      throw new NotFoundException(`Payment with id ${id} not found`);
+    }
+    return payment;
   }
 
-  update(id: number, updatePaymentDto: UpdatePaymentDto) {
-    return `This action updates a #${id} payment`;
+  async update(id: string, updatePaymentDto: UpdatePaymentDto) {
+    const payment = await this.paymentRepository.preload({
+      id,
+      ...updatePaymentDto,
+    });
+
+    if(!payment) {
+      throw new NotFoundException(`Payment with id ${id} not found`);
+    }
+    return this.paymentRepository.save(payment);
   }
 
-  remove(id: number) {
-    return `This action removes a #${id} payment`;
+  async remove(id: string) {
+    await this.findOne(id);
+    await this.paymentRepository.softDelete(id);
+    return `Payment deleted successfully`;
   }
 }

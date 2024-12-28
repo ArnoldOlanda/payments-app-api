@@ -4,21 +4,18 @@ import { CreditTypeInterface } from "src/interfaces/credit-type.interface";
 import { CustomerInterface } from "src/interfaces/customer.interface";
 import { Column, CreateDateColumn, DeleteDateColumn, Entity, ManyToOne, OneToMany, UpdateDateColumn } from "typeorm";
 import { AccountStatus } from "../enums/account-status.enum";
-import { CreditType } from "src/credit-type/entities/credit-type.entity";
 import { Customer } from "src/customer/entities/customer.entity";
 import { Payment } from "src/payment/entities/payment.entity";
+import { CreditType } from "../enums/credit-type.enum";
 
 @Entity('account')
 export class Account extends BaseEntity implements AccountInterface{
 
-    @ManyToOne(()=>CreditType, (creditType)=>creditType.accounts)
-    creditType: CreditTypeInterface;
-
     @ManyToOne(()=>Customer, (customer)=>customer.accounts)
     customer: CustomerInterface;
 
-    @Column({type: 'varchar', length: 10})
-    number: string;
+    @Column({type:'integer'})
+    number: number;
 
     @Column({type: 'date'})
     date: Date;
@@ -38,6 +35,9 @@ export class Account extends BaseEntity implements AccountInterface{
         default: 'active',
     })
     status: AccountStatus;
+
+    @Column({type:'enum',enum: Object.values(CreditType)})
+    creditType: CreditType;
 
     @OneToMany(()=>Payment, (payment)=>payment.account)
     payments: Payment[];
