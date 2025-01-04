@@ -14,10 +14,6 @@ export class CreateAccountDto {
     creditType: CreditType;
 
     @IsNotEmpty()
-    @IsNumber()
-    number: number;
-
-    @IsNotEmpty()
     @IsDate()
     date: Date;
 

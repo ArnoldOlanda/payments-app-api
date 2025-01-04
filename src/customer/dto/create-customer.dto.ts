@@ -32,5 +32,5 @@ export class CreateCustomerDto {
     @IsOptional()
     @IsString()
     @IsUUID()
-    zone_id?: string;
+    zoneId?: string;
 }

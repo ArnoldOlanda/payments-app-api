@@ -14,9 +14,6 @@ export class Account extends BaseEntity implements AccountInterface{
     @ManyToOne(()=>Customer, (customer)=>customer.accounts)
     customer: CustomerInterface;
 
-    @Column({type:'integer'})
-    number: number;
-
     @Column({type: 'date'})
     date: Date;
 
@@ -31,12 +28,16 @@ export class Account extends BaseEntity implements AccountInterface{
 
     @Column({
         type: 'enum',
-        enum: Object.values(AccountStatus),
-        default: 'active',
+        enum: AccountStatus,
+        default: AccountStatus.ACTIVE,
     })
     status: AccountStatus;
 
-    @Column({type:'enum',enum: Object.values(CreditType)})
+    @Column({
+        type:'enum',
+        enum: CreditType, 
+        default: CreditType.DIARIO
+    })
     creditType: CreditType;
 
     @OneToMany(()=>Payment, (payment)=>payment.account)
