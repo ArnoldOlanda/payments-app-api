@@ -11,5 +11,6 @@ export interface AccountInterface {
   dueDate: Date;
   amount: number;
   interest: number;
+  remainingBalance: number;
   status: AccountStatus;
 }

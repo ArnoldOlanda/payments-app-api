@@ -8,6 +8,7 @@ import { ZoneModule } from './zone/zone.module';
 import { CustomerModule } from './customer/customer.module';
 import { AccountModule } from './account/account.module';
 import { PaymentModule } from './payment/payment.module';
+import { AuthModule } from './auth/auth.module';
 
 
 @Module({
@@ -17,7 +18,7 @@ import { PaymentModule } from './payment/payment.module';
       isGlobal: true,
     }),
     TypeOrmModule.forRoot(dataSource), 
-    UserModule, RoleModule, ZoneModule, CustomerModule, AccountModule, PaymentModule
+    UserModule, RoleModule, ZoneModule, CustomerModule, AccountModule, PaymentModule, AuthModule
   ],
   controllers: [],
   providers: [],

@@ -16,5 +16,6 @@ import { Zone } from 'src/zone/entities/zone.entity';
   ],
   controllers: [UserController],
   providers: [UserService],
+  exports: [UserService, TypeOrmModule],
 })
 export class UserModule {}

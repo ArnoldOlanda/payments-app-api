@@ -1,6 +1,5 @@
 import { BaseEntity } from "src/entities/base.entity";
 import { AccountInterface } from "src/interfaces/account.interface";
-import { CreditTypeInterface } from "src/interfaces/credit-type.interface";
 import { CustomerInterface } from "src/interfaces/customer.interface";
 import { Column, CreateDateColumn, DeleteDateColumn, Entity, ManyToOne, OneToMany, UpdateDateColumn } from "typeorm";
 import { AccountStatus } from "../enums/account-status.enum";
@@ -25,6 +24,9 @@ export class Account extends BaseEntity implements AccountInterface{
 
     @Column({type: 'float'})
     interest: number;
+
+    @Column({type: 'float', default: 0})
+    remainingBalance: number;
 
     @Column({
         type: 'enum',

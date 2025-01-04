@@ -1,5 +1,6 @@
 import { IsDate, IsIn, IsNotEmpty, IsNumber, IsString, IsUUID } from "class-validator";
 import { CreditType } from "../enums/credit-type.enum";
+import { IsAfter } from "../decorators/is-after/is-after.decorator";
 
 export class CreateAccountDto {
 
@@ -10,7 +11,7 @@ export class CreateAccountDto {
 
     @IsNotEmpty()
     @IsString()
-    @IsIn(Object.values(CreditType))
+    @IsIn(Object.values(CreditType),{message: 'El tipo de credito no es valido'})
     creditType: CreditType;
 
     @IsNotEmpty()
@@ -19,6 +20,7 @@ export class CreateAccountDto {
 
     @IsNotEmpty()
     @IsDate()
+    @IsAfter('date',{message: 'La fecha de vencimiento no puede ser anterior a la fecha del credito'})
     dueDate: Date;
 
     @IsNotEmpty()

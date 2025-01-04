@@ -60,6 +60,11 @@ export class UserService {
     return this.userRepository.findOne({where: {id}});
   }
 
+  async findBy(field: keyof User, value: string) {
+    
+    return this.userRepository.findOne({where: {[field]: value}, select: ['id', 'name', 'email', 'password']});
+  }
+
   async update(id: string, updateUserDto: UpdateUserDto) {
     const role = await this.roleRepository.preload({
       id,

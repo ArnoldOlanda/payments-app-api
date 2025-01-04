@@ -5,6 +5,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Payment } from './entities/payment.entity';
 import { Account } from 'src/account/entities/account.entity';
+import { AccountStatus } from 'src/account/enums/account-status.enum';
 
 @Injectable()
 export class PaymentService {
@@ -24,12 +25,28 @@ export class PaymentService {
       throw new NotFoundException(`Account with id ${accountId} not found`);
     }
 
+    if(account.status === AccountStatus.FINISHED) {
+      throw new NotFoundException(`Account with id ${accountId} is finished`);
+    }
+
+    const remainingBalance = account.remainingBalance;
+    if(remainingBalance < createPaymentDto.amount) {
+      throw new NotFoundException(
+        `The amount ${createPaymentDto.amount} is greater than the remaining balance ${remainingBalance}`
+      );
+    }
+
     const payment = this.paymentRepository.create({
       ...createPaymentDto,
       account,
     });
 
-    return this.paymentRepository.save(payment);
+    //Update remaining balance
+    account.remainingBalance = remainingBalance - createPaymentDto.amount;
+
+    const savedPayment = await this.paymentRepository.save(payment);
+    await this.accountRepository.save(account);
+    return savedPayment;
   }
 
   findAll(accountId: string|undefined) {
