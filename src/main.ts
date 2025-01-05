@@ -1,9 +1,10 @@
 import { NestFactory } from '@nestjs/core';
-import { AppModule } from './app.module';
 import { ConfigService } from '@nestjs/config';
-import * as morgan from 'morgan';
 import { Logger, ValidationPipe } from '@nestjs/common';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import * as morgan from 'morgan';
 import { CORS } from './constants';
+import { AppModule } from './app.module';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -22,6 +23,15 @@ async function bootstrap() {
   app.setGlobalPrefix('api/v1');
   const port = app.get(ConfigService).get('PORT');
   
+  const config = new DocumentBuilder()
+    .setTitle('Cats example')
+    .setDescription('The cats API description')
+    .setVersion('1.0')
+    .build();
+    
+  const documentFactory = () => SwaggerModule.createDocument(app, config);
+  SwaggerModule.setup('api', app, documentFactory);
+
   Logger.log(`Server started on port ${port}`);
   await app.listen(port ?? 3000);
 }

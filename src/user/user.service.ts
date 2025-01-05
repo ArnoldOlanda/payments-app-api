@@ -62,7 +62,10 @@ export class UserService {
 
   async findBy(field: keyof User, value: string) {
     
-    return this.userRepository.findOne({where: {[field]: value}, select: ['id', 'name', 'email', 'password']});
+    return this.userRepository.findOne({
+      where: {[field]: value}, 
+      select: ['id', 'name', 'email', 'password']
+    });
   }
 
   async update(id: string, updateUserDto: UpdateUserDto) {

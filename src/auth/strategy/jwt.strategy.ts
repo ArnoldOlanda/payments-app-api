@@ -22,13 +22,14 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   // Este método valida el token decodificado (el payload)
-  async validate(payload: { email: string }) {
-    // console.log({ payload });
+  async validate(payload: { id: string }) {
     // Aquí podrías hacer más validaciones o cargar el usuario desde la base de datos
-    const user = await this.userRepository.findOne({ where: { email: payload.email } });
+    const user = await this.userRepository.findOne({ where: { id: payload.id }, relations:['role'] });
     if (!user) {
       throw new UnauthorizedException('Token no válido');
     }
-    return { email: payload.email };
+    console.log({user});
+    
+    return { ...user, role: user.role.name } ;
   }
 }

@@ -26,7 +26,7 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials-password');
     }
 
-    const payload = { email: createAuthDto.email };
+    const payload = { id: userByEmail.id };
     const token = this.generateToken(payload);
 
     return {
@@ -35,7 +35,7 @@ export class AuthService {
     };
   }
 
-  private generateToken(payload: { email: string  }) {
+  private generateToken(payload: { id: string  }) {
     return this.jwtService.sign(payload);
   }
 }
