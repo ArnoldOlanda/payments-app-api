@@ -5,6 +5,7 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import * as morgan from 'morgan';
 import { CORS } from './constants';
 import { AppModule } from './app.module';
+import * as cookieParser from 'cookie-parser';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -19,6 +20,7 @@ async function bootstrap() {
       },
     })
   );
+  app.use(cookieParser());
   app.enableCors(CORS);
   app.setGlobalPrefix('api/v1');
   const port = app.get(ConfigService).get('PORT');
@@ -31,7 +33,6 @@ async function bootstrap() {
     
   const documentFactory = () => SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api', app, documentFactory);
-
   Logger.log(`Server started on port ${port}`);
   await app.listen(port ?? 3000);
 }

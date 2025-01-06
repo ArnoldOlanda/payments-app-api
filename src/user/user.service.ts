@@ -64,7 +64,8 @@ export class UserService {
     
     return this.userRepository.findOne({
       where: {[field]: value}, 
-      select: ['id', 'name', 'email', 'password']
+      select: ['id', 'name', 'email', 'password'],
+      relations: ['zones']
     });
   }
 
