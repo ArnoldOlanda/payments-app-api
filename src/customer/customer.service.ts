@@ -5,11 +5,14 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Customer } from './entities/customer.entity';
 import { Repository } from 'typeorm';
 import { Zone } from 'src/zone/entities/zone.entity';
+import { Account } from 'src/account/entities/account.entity';
 
 @Injectable()
 export class CustomerService {
 
   constructor(
+    @InjectRepository(Account)
+    private readonly accountRepository: Repository<Account>,
     @InjectRepository(Customer)
     private readonly customerRepository: Repository<Customer>,
     @InjectRepository(Zone)
@@ -81,8 +84,18 @@ export class CustomerService {
         throw new NotFoundException('Customer not found');
       }
 
-      await this.customerRepository.softDelete(id);
+      const accounts = await this.accountRepository.find({
+        where: {customer: { id }},
+        relations: ['customer']
+      });
+      
+      //Delete all accounts related to customer (soft delete)
+      for (const account of accounts) {
+        await this.accountRepository.softDelete(account.id);
+      }
 
+      await this.customerRepository.softDelete(id);
+    
       return 'Customer deleted successfully';
   }
 }

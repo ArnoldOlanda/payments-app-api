@@ -4,12 +4,14 @@ import { CustomerController } from './customer.controller';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Zone } from 'src/zone/entities/zone.entity';
 import { Customer } from './entities/customer.entity';
+import { Account } from 'src/account/entities/account.entity';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([
+      Account,
       Customer,
-      Zone
+      Zone,
     ]),
   ],
   controllers: [CustomerController],
