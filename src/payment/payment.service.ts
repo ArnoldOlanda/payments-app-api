@@ -42,7 +42,11 @@ export class PaymentService {
     });
 
     //Update remaining balance
-    account.remainingBalance = remainingBalance - createPaymentDto.amount;
+    const restAmount = remainingBalance - createPaymentDto.amount;
+    account.remainingBalance = restAmount;
+    if(restAmount === 0){
+      account.status = AccountStatus.FINISHED;
+    }
 
     const savedPayment = await this.paymentRepository.save(payment);
     await this.accountRepository.save(account);

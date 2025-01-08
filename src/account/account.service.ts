@@ -5,6 +5,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Account } from './entities/account.entity';
 import { Customer } from 'src/customer/entities/customer.entity';
+import { AccountStatus } from './enums/account-status.enum';
+import { PaginateAccountDto } from './dto/paginate-account.dto';
 
 @Injectable()
 export class AccountService {
@@ -17,7 +19,7 @@ export class AccountService {
   ) {}
 
   async create(createAccountDto: CreateAccountDto) {
-    const { customerId } = createAccountDto;
+    const { customerId, amount } = createAccountDto;
 
     const customer = await this.customerRepository.findOne({where: {id: customerId}});
     if(!customer) {
@@ -25,14 +27,46 @@ export class AccountService {
     }
     const account = this.accountRepository.create({
       ...createAccountDto,
+      remainingBalance: amount,
       customer,
     });
 
     return this.accountRepository.save(account);
   }
 
-  findAll() {
-    return this.accountRepository.find({relations: ['customer']});
+  async findAll({ status, page, limit, search, order, sortBy }: PaginateAccountDto) {
+
+    const skip = (page - 1) * limit;
+    const query = this.accountRepository.createQueryBuilder('account');
+
+    if(status) {
+      query.where('account.status = :status', {status});
+    }
+
+    query.leftJoinAndSelect('account.customer', 'customer');
+
+    // if (search) {
+    //   queryBuilder.where('item.name LIKE :search', { search: `%${search}%` });
+    // }
+
+    // // Ordenamiento (opcional)
+    // if (sortBy && order) {
+    //   queryBuilder.orderBy(`item.${sortBy}`, order.toUpperCase() as 'ASC' | 'DESC');
+    // }
+
+    query.skip(skip).take(limit);
+
+    const [accounts, total] = await query.getManyAndCount();
+
+    return {
+      data: accounts,
+      meta:{
+        total,
+        limit,
+        totalPages: Math.ceil(total / limit),
+        currentPage: page,
+      }
+    };
   }
 
   findOne(id: string) {

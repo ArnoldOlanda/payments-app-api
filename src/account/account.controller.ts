@@ -1,9 +1,11 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, ParseUUIDPipe } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, ParseUUIDPipe, Query } from '@nestjs/common';
 import { AccountService } from './account.service';
 import { CreateAccountDto } from './dto/create-account.dto';
 import { UpdateAccountDto } from './dto/update-account.dto';
 import { Auth } from 'src/auth/decorators/auth.decorator';
 import { ValidRole } from 'src/auth/enums/validRoles.enum';
+import { AccountStatus } from './enums/account-status.enum';
+import { PaginateAccountDto } from './dto/paginate-account.dto';
 
 @Controller('account')
 export class AccountController {
@@ -17,8 +19,10 @@ export class AccountController {
 
   @Get()
   @Auth(ValidRole.PRESTAMISTA)
-  findAll() {
-    return this.accountService.findAll();
+  findAll(
+    @Query() listAccountDto: PaginateAccountDto,
+  ) {
+    return this.accountService.findAll(listAccountDto);
   }
 
   @Get(':id')
