@@ -1,4 +1,4 @@
-import { IsEnum, IsNumber, IsOptional, IsString, Min } from "class-validator";
+import { IsEnum, IsNumber, IsOptional, IsString, IsUUID, Min } from "class-validator";
 import { AccountStatus } from "../enums/account-status.enum";
 
 
@@ -6,6 +6,10 @@ export class PaginateAccountDto {
     @IsEnum(AccountStatus, {message: 'The valid values are active, finished, cancelled, overdue'})
     status: AccountStatus;
     
+    @IsOptional()
+    @IsUUID('4')
+    zoneId?: string;
+
     @IsOptional()
     @IsNumber()
     @Min(1)

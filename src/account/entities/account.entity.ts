@@ -45,7 +45,7 @@ export class Account extends BaseEntity implements AccountInterface{
     @OneToMany(()=>Payment, (payment)=>payment.account)
     payments: Payment[];
 
-    @CreateDateColumn({ select: false })
+    @CreateDateColumn()
      createdAt: Date;
     
     @UpdateDateColumn({ select: false })

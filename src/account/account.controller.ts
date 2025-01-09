@@ -20,9 +20,9 @@ export class AccountController {
   @Get()
   @Auth(ValidRole.PRESTAMISTA)
   findAll(
-    @Query() listAccountDto: PaginateAccountDto,
+    @Query() paginateAccountDto: PaginateAccountDto,
   ) {
-    return this.accountService.findAll(listAccountDto);
+    return this.accountService.findAll(paginateAccountDto);
   }
 
   @Get(':id')

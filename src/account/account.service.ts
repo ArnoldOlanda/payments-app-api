@@ -34,16 +34,22 @@ export class AccountService {
     return this.accountRepository.save(account);
   }
 
-  async findAll({ status, page, limit, search, order, sortBy }: PaginateAccountDto) {
+  async findAll({ zoneId, status, page, limit, search, order, sortBy }: PaginateAccountDto) {
 
     const skip = (page - 1) * limit;
-    const query = this.accountRepository.createQueryBuilder('account');
+    const query = this.accountRepository.createQueryBuilder('account')
+      .leftJoinAndSelect('account.customer', 'customer')
+      .leftJoinAndSelect('customer.zone', 'zone');
+
 
     if(status) {
       query.where('account.status = :status', {status});
     }
 
-    query.leftJoinAndSelect('account.customer', 'customer');
+    if(zoneId) {
+      query.where('zone.id = :zoneId', {zoneId});
+    }
+
 
     // if (search) {
     //   queryBuilder.where('item.name LIKE :search', { search: `%${search}%` });
@@ -53,8 +59,9 @@ export class AccountService {
     // if (sortBy && order) {
     //   queryBuilder.orderBy(`item.${sortBy}`, order.toUpperCase() as 'ASC' | 'DESC');
     // }
-
-    query.skip(skip).take(limit);
+    query.orderBy('account.createdAt', 'DESC');
+    query.skip(skip);
+    query.take(limit);
 
     const [accounts, total] = await query.getManyAndCount();
 
