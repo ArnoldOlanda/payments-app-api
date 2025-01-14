@@ -1,4 +1,4 @@
-import { Customer } from "src/customer/entities/customer.entity";
+import { Customer } from "../../customer/entities/customer.entity";
 import { BaseEntity } from "../../entities/base.entity";
 import { ZoneInterface } from "../../interfaces/zone.interface";
 import { Column, CreateDateColumn, DeleteDateColumn, Entity, OneToMany, UpdateDateColumn } from "typeorm";

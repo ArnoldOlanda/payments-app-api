@@ -1,10 +1,10 @@
-import { BaseEntity } from "src/entities/base.entity";
-import { AccountInterface } from "src/interfaces/account.interface";
-import { CustomerInterface } from "src/interfaces/customer.interface";
+import { BaseEntity } from "../../entities/base.entity";
+import { AccountInterface } from "../../interfaces/account.interface";
+import { CustomerInterface } from "../../interfaces/customer.interface";
 import { Column, CreateDateColumn, DeleteDateColumn, Entity, ManyToOne, OneToMany, UpdateDateColumn } from "typeorm";
 import { AccountStatus } from "../enums/account-status.enum";
-import { Customer } from "src/customer/entities/customer.entity";
-import { Payment } from "src/payment/entities/payment.entity";
+import { Customer } from "../../customer/entities/customer.entity";
+import { Payment } from "../../payment/entities/payment.entity";
 import { CreditType } from "../enums/credit-type.enum";
 
 @Entity('account')

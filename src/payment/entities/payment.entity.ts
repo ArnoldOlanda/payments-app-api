@@ -1,6 +1,6 @@
-import { Account } from "src/account/entities/account.entity";
-import { BaseEntity } from "src/entities/base.entity";
-import { PaymentInterface } from "src/interfaces/payment.interface";
+import { Account } from "../../account/entities/account.entity";
+import { BaseEntity } from "../../entities/base.entity";
+import { PaymentInterface } from "../../interfaces/payment.interface";
 import { Entity, CreateDateColumn, ManyToOne, Column, UpdateDateColumn, DeleteDateColumn } from 'typeorm';
 
 @Entity('payment')

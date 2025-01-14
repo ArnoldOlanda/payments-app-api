@@ -1,4 +1,4 @@
-import { CustomerInterface } from 'src/interfaces/customer.interface';
+import { CustomerInterface } from '../../interfaces/customer.interface';
 import { BaseEntity } from '../../entities/base.entity';
 import {
   Column,
@@ -9,8 +9,8 @@ import {
   OneToMany,
   UpdateDateColumn,
 } from 'typeorm';
-import { Zone } from 'src/zone/entities/zone.entity';
-import { Account } from 'src/account/entities/account.entity';
+import { Zone } from '../../zone/entities/zone.entity';
+import { Account } from '../../account/entities/account.entity';
 
 @Entity('customer')
 export class Customer extends BaseEntity implements CustomerInterface {
