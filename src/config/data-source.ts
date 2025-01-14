@@ -6,7 +6,7 @@ ConfigModule.forRoot({
     envFilePath: `.${process.env.NODE_ENV}.env`,
 })
 const configService = new ConfigService();
-console.log(process.env.NODE_ENV);
+
 export const dataSource: DataSourceOptions = {
     type: 'postgres',
     host: configService.get('DB_HOST'),
