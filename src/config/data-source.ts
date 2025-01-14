@@ -6,7 +6,7 @@ ConfigModule.forRoot({
     envFilePath: `.${process.env.NODE_ENV}.env`,
 })
 const configService = new ConfigService();
-
+console.log(process.env.NODE_ENV);
 export const dataSource: DataSourceOptions = {
     type: 'postgres',
     host: configService.get('DB_HOST'),
@@ -16,7 +16,7 @@ export const dataSource: DataSourceOptions = {
     database: configService.get('DB_NAME'),
     entities: [__dirname + '/../**/*.entity{.ts,.js}'],
     migrations: [__dirname + '/../migrations/*.{ts,js}'],
-    synchronize: true, //! Change to false on production
+    synchronize: process.env.NODE_ENV === 'production' ? false : true,
     logging: false,
 }
 
