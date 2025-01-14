@@ -9,6 +9,7 @@ import { CustomerModule } from './customer/customer.module';
 import { AccountModule } from './account/account.module';
 import { PaymentModule } from './payment/payment.module';
 import { AuthModule } from './auth/auth.module';
+import { SeedModule } from './seed/seed.module';
 
 
 @Module({
@@ -18,7 +19,7 @@ import { AuthModule } from './auth/auth.module';
       isGlobal: true,
     }),
     TypeOrmModule.forRoot(dataSource), 
-    UserModule, RoleModule, ZoneModule, CustomerModule, AccountModule, PaymentModule, AuthModule
+    UserModule, RoleModule, ZoneModule, CustomerModule, AccountModule, PaymentModule, AuthModule, SeedModule
   ],
   controllers: [],
   providers: [],
