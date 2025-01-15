@@ -21,7 +21,7 @@ export class UserService {
   ) {}
 
   async create(createUserDto: CreateUserDto) {
-
+    const {zones, ...rest} = createUserDto;
     try {
       const role = await this.roleRepository.findOne({where: {id: createUserDto.role_id}});
     
@@ -30,12 +30,17 @@ export class UserService {
       }
 
       const user = this.userRepository.create({
-        ...createUserDto,
+        ...rest,
         role,
         password: encryptPassword(createUserDto.password)
       });
       
       const savedUser = await this.userRepository.save(user);
+
+      if(zones) {
+        await this.assingZones(savedUser.id, zones);
+      }
+
       return savedUser;
     } catch (error:any) {
       if(error.code === '23505') {
@@ -70,6 +75,7 @@ export class UserService {
   }
 
   async update(id: string, updateUserDto: UpdateUserDto) {
+    const {zones, ...rest} = updateUserDto;
     const role = await this.roleRepository.preload({
       id,
       ...updateUserDto
@@ -79,7 +85,7 @@ export class UserService {
       throw new NotFoundException('Role not found');
     }
     
-    return this.userRepository.save(updateUserDto);
+    return this.userRepository.save(rest);
   }
 
   async remove(id: string) {
