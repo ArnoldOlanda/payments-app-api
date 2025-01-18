@@ -76,16 +76,27 @@ export class UserService {
 
   async update(id: string, updateUserDto: UpdateUserDto) {
     const {zones, ...rest} = updateUserDto;
-    const role = await this.roleRepository.preload({
-      id,
-      ...updateUserDto
+
+    if(rest.password){ // Si se cambio la contraseña, encriptar
+      rest.password = encryptPassword(rest.password);
+    }
+
+    const userZones: Zone[] = [];
+    zones.forEach(async(zone) => {
+      const zoneFound = await this.zoneRepository.findOne({where: {id: zone}});
+      if(!zoneFound) {
+        throw new NotFoundException(`Zone with id ${zone} not found`);
+      }
+      userZones.push(zoneFound);
     });
 
-    if (!role) {
-      throw new NotFoundException('Role not found');
-    }
-    
-    return this.userRepository.save(rest);
+    const user = await this.userRepository.preload({
+      id,
+      ...rest,
+      zones: userZones
+    });
+
+    return this.userRepository.save(user);
   }
 
   async remove(id: string) {
