@@ -10,31 +10,31 @@ export class CustomerController {
   constructor(private readonly customerService: CustomerService) {}
 
   @Post()
-  @Auth(ValidRole.PRESTAMISTA)
+  @Auth(ValidRole.ADMIN, ValidRole.PRESTAMISTA)
   create(@Body() createCustomerDto: CreateCustomerDto) {
     return this.customerService.create(createCustomerDto);
   }
 
   @Get()
-  @Auth(ValidRole.PRESTAMISTA)
+  @Auth(ValidRole.ADMIN, ValidRole.PRESTAMISTA)
   findAll() {
     return this.customerService.findAll();
   }
 
   @Get(':id')
-  @Auth(ValidRole.PRESTAMISTA)
+  @Auth(ValidRole.ADMIN, ValidRole.PRESTAMISTA)
   findOne(@Param('id', ParseUUIDPipe) id: string) {
     return this.customerService.findOne(id);
   }
 
   @Patch(':id')
-  @Auth(ValidRole.PRESTAMISTA)
+  @Auth(ValidRole.ADMIN, ValidRole.PRESTAMISTA)
   update(@Param('id', ParseUUIDPipe) id: string, @Body() updateCustomerDto: UpdateCustomerDto) {
     return this.customerService.update(id, updateCustomerDto);
   }
 
   @Delete(':id')
-  @Auth(ValidRole.PRESTAMISTA)
+  @Auth(ValidRole.ADMIN, ValidRole.PRESTAMISTA)
   remove(@Param('id', ParseUUIDPipe) id: string) {
     return this.customerService.remove(id);
   }
