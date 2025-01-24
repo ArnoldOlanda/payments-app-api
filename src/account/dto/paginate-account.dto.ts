@@ -3,8 +3,9 @@ import { AccountStatus } from "../enums/account-status.enum";
 
 
 export class PaginateAccountDto {
+    @IsOptional()
     @IsEnum(AccountStatus, {message: 'The valid values are active, finished, cancelled, overdue'})
-    status: AccountStatus;
+    status?: AccountStatus;
     
     @IsOptional()
     @IsUUID('4')

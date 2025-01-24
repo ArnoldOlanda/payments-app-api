@@ -77,7 +77,10 @@ export class AccountService {
   }
 
   findOne(id: string) {
-    const account = this.accountRepository.findOne({where: { id }});
+    const account = this.accountRepository.findOne({
+      where: { id },
+      relations: ['customer','payments'],
+    });
     if(!account) {
       throw new NotFoundException(`Account with id ${id} not found`);
     }
