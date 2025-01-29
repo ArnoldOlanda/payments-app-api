@@ -12,13 +12,13 @@ export class AccountController {
   constructor(private readonly accountService: AccountService) {}
 
   @Post()
-  @Auth(ValidRole.PRESTAMISTA)
+  @Auth(ValidRole.ADMIN, ValidRole.PRESTAMISTA)
   create(@Body() createAccountDto: CreateAccountDto) {
     return this.accountService.create(createAccountDto);
   }
 
   @Get()
-  @Auth(ValidRole.PRESTAMISTA)
+  @Auth(ValidRole.ADMIN, ValidRole.PRESTAMISTA)
   findAll(
     @Query() paginateAccountDto: PaginateAccountDto,
   ) {
@@ -26,13 +26,13 @@ export class AccountController {
   }
 
   @Get(':id')
-  @Auth(ValidRole.PRESTAMISTA)
+  @Auth(ValidRole.ADMIN, ValidRole.PRESTAMISTA)
   findOne(@Param('id', ParseUUIDPipe) id: string) {
     return this.accountService.findOne(id);
   }
 
   @Patch(':id')
-  @Auth(ValidRole.PRESTAMISTA)
+  @Auth(ValidRole.ADMIN, ValidRole.PRESTAMISTA)
   update(
     @Param('id', ParseUUIDPipe) id: string, 
     @Body() updateAccountDto: UpdateAccountDto
@@ -41,7 +41,7 @@ export class AccountController {
   }
 
   @Delete(':id')
-  @Auth(ValidRole.PRESTAMISTA)
+  @Auth(ValidRole.ADMIN)
   remove(@Param('id', ParseUUIDPipe) id: string) {
     return this.accountService.remove(id);
   }
