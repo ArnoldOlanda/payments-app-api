@@ -18,7 +18,7 @@ export class ZoneService {
   }
 
   findAll() {
-    return this.zoneRepository.find();
+    return this.zoneRepository.find({relations: ['customers']});
   }
 
   async findOne(id: string) {
