@@ -27,6 +27,12 @@ export class CustomerController {
     return this.customerService.findOne(id);
   }
 
+  @Get(':id/credits')
+  @Auth(ValidRole.ADMIN, ValidRole.PRESTAMISTA)
+  findCredits(@Param('id', ParseUUIDPipe) id: string) {
+    return this.customerService.findCredits(id);
+  }
+
   @Patch(':id')
   @Auth(ValidRole.ADMIN, ValidRole.PRESTAMISTA)
   update(@Param('id', ParseUUIDPipe) id: string, @Body() updateCustomerDto: UpdateCustomerDto) {

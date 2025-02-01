@@ -57,6 +57,20 @@ export class CustomerService {
     return customer;
   }
 
+  async findCredits(id: string) {
+    const customer = await this.customerRepository.findOne({where: {id}});
+    if (!customer) {
+      throw new NotFoundException('Customer not found');
+    }
+
+    const accounts = await this.accountRepository.find({
+      where: {customer: { id }},
+      relations: ['customer']
+    });
+
+    return accounts;
+  }
+
   async update(id: string, updateCustomerDto: UpdateCustomerDto) {
     const zone = await this.zoneRepository.findOne({where: {id: updateCustomerDto.zoneId}});
 

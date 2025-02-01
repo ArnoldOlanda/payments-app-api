@@ -10,6 +10,7 @@ import { AccountModule } from './account/account.module';
 import { PaymentModule } from './payment/payment.module';
 import { AuthModule } from './auth/auth.module';
 import { SeedModule } from './seed/seed.module';
+import { FilesModule } from './files/files.module';
 
 
 @Module({
@@ -19,7 +20,7 @@ import { SeedModule } from './seed/seed.module';
       isGlobal: true,
     }),
     TypeOrmModule.forRoot(dataSource), 
-    UserModule, RoleModule, ZoneModule, CustomerModule, AccountModule, PaymentModule, AuthModule, SeedModule
+    UserModule, RoleModule, ZoneModule, CustomerModule, AccountModule, PaymentModule, AuthModule, SeedModule, FilesModule
   ],
   controllers: [],
   providers: [],
