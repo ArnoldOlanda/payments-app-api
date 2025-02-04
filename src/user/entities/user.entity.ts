@@ -1,8 +1,9 @@
+import { Column, CreateDateColumn, DeleteDateColumn, Entity, JoinTable, ManyToMany, ManyToOne, OneToMany, UpdateDateColumn } from "typeorm";
 import { Zone } from "../../zone/entities/zone.entity";
 import { BaseEntity } from "../../entities/base.entity";
 import { UserInterface } from "../../interfaces/user.interface";
 import { Role } from "../../role/entities/role.entity";
-import { Column, CreateDateColumn, DeleteDateColumn, Entity, JoinTable, ManyToMany, ManyToOne, UpdateDateColumn } from "typeorm";
+import { Payment } from "../../payment/entities/payment.entity";
 
 @Entity('user')
 export class User extends BaseEntity implements UserInterface{
@@ -33,6 +34,9 @@ export class User extends BaseEntity implements UserInterface{
     @ManyToMany(()=> Zone,{cascade: true})
     @JoinTable()
     zones: Zone[];
+
+    @OneToMany(()=> Payment, (payment) => payment.user)
+    payments: Payment[];
 
     @CreateDateColumn({ select: false })
     createdAt: Date;
