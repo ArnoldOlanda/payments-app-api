@@ -6,6 +6,7 @@ import { Repository } from 'typeorm';
 import { Payment } from './entities/payment.entity';
 import { Account } from 'src/account/entities/account.entity';
 import { AccountStatus } from 'src/account/enums/account-status.enum';
+import { User } from 'src/user/entities/user.entity';
 
 @Injectable()
 export class PaymentService {
@@ -15,14 +16,22 @@ export class PaymentService {
     private readonly accountRepository: Repository<Account>,
     @InjectRepository(Payment)
     private readonly paymentRepository: Repository<Payment>,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
   ) {}
 
   async create(createPaymentDto: CreatePaymentDto) {
 
     const { accountId } = createPaymentDto
     const account = await this.accountRepository.findOne({where: {id: accountId}});
+    const user = await this.userRepository.findOne({where: {id: createPaymentDto.userId}});
+
     if(!account) {
       throw new NotFoundException(`Account with id ${accountId} not found`);
+    }
+
+    if(!user) {
+      throw new NotFoundException(`User with id ${createPaymentDto.userId} not found`);
     }
 
     if(account.status === AccountStatus.FINISHED) {
@@ -39,6 +48,7 @@ export class PaymentService {
     const payment = this.paymentRepository.create({
       ...createPaymentDto,
       account,
+      user
     });
 
     //Update remaining balance

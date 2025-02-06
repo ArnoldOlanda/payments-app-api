@@ -51,4 +51,10 @@ export class UserController {
   ) {
     return this.userService.assingZones(id, assignZonesDto.zones_id);
   }
+
+  @Get(':id/total-payments-today')
+  @Auth(ValidRole.ADMIN, ValidRole.PRESTAMISTA)
+  totalPaymentsToday(@Param('id', ParseUUIDPipe) id: string) {
+    return this.userService.totalPaymentsToday(id);
+  }
 }

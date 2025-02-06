@@ -7,6 +7,7 @@ import { In, Repository } from 'typeorm';
 import { Role } from 'src/role/entities/role.entity';
 import { encryptPassword } from 'src/helpers/encryptPassword';
 import { Zone } from 'src/zone/entities/zone.entity';
+import { Payment } from 'src/payment/entities/payment.entity';
 
 @Injectable()
 export class UserService {
@@ -18,6 +19,8 @@ export class UserService {
     private readonly roleRepository: Repository<Role>,
     @InjectRepository(Zone)
     private readonly zoneRepository: Repository<Zone>,
+    @InjectRepository(Payment)
+    private readonly paymentRepository: Repository<Payment>,
   ) {}
 
   async create(createUserDto: CreateUserDto) {
@@ -134,5 +137,25 @@ export class UserService {
   
     // Guardar cambios
     return this.userRepository.save(user);
+  }
+
+  async totalPaymentsToday(userId: string) {
+    const user = await this.userRepository.findOne({where: {id: userId}});
+    if (!user) {
+      throw new NotFoundException(`User with id ${userId} not found`);
+    }
+
+    const payments = this.paymentRepository.createQueryBuilder('p')
+      .innerJoin('p.account', 'a')
+      .innerJoin('a.customer', 'c')
+      .innerJoin('c.zone', 'z')
+      .select('z.name', 'zone')
+      .addSelect('SUM(p.amount)', 'total')
+      .where('p.date = CURRENT_DATE')
+      .andWhere('p.userId = :userId', { userId })
+      .groupBy('z.id')
+      .getRawMany();
+
+    return payments;
   }
 }

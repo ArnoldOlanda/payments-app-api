@@ -1,3 +1,4 @@
+import { Type } from "class-transformer";
 import { IsDate, IsNotEmpty, IsNumber, IsString, IsUUID } from "class-validator";
 
 export class CreatePaymentDto {
@@ -8,7 +9,13 @@ export class CreatePaymentDto {
     accountId: string;
 
     @IsNotEmpty()
+    @IsString()
+    @IsUUID()
+    userId: string;
+
+    @IsNotEmpty()
     @IsDate()
+    @Type(() => Date)
     date: Date;
 
     @IsNotEmpty()
