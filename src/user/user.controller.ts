@@ -57,4 +57,10 @@ export class UserController {
   totalPaymentsToday(@Param('id', ParseUUIDPipe) id: string) {
     return this.userService.totalPaymentsToday(id);
   }
+
+  @Get(':id/customers')
+  @Auth(ValidRole.ADMIN, ValidRole.PRESTAMISTA)
+  findCustomers(@Param('id', ParseUUIDPipe) id: string) {
+    return this.userService.findCustomers(id);
+  }
 }

@@ -16,7 +16,7 @@ export class CustomerController {
   }
 
   @Get()
-  @Auth(ValidRole.ADMIN, ValidRole.PRESTAMISTA)
+  @Auth(ValidRole.ADMIN)
   findAll() {
     return this.customerService.findAll();
   }

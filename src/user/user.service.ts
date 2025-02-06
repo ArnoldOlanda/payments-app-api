@@ -57,6 +57,19 @@ export class UserService {
     return this.userRepository.find({relations: ['zones']});
   }
 
+  async findCustomers(userId: string) {
+    const user = await this.userRepository.findOne({
+      where: {id: userId},
+      relations: ['zones','zones.customers']
+    });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const customers = user.zones.map((zone) => zone.customers).flat();
+    return customers;
+  }
+
   async findOne(id: string) {
 
     const user = await this.userRepository.findOne({where: {id}});
