@@ -66,7 +66,14 @@ export class UserService {
       throw new NotFoundException('User not found');
     }
 
-    const customers = user.zones.map((zone) => zone.customers).flat();
+    const customers = user.zones.flatMap(zone => 
+      zone.customers.map(customer => ({
+        ...customer,
+        zone,
+        zoneId: zone.id
+      }))
+    );
+
     return customers;
   }
 
