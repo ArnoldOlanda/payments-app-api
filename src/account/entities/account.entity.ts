@@ -13,10 +13,10 @@ export class Account extends BaseEntity implements AccountInterface{
     @ManyToOne(()=>Customer, (customer)=>customer.accounts)
     customer: CustomerInterface;
 
-    @Column({type: 'date'})
+    @Column({type: 'timestamp without time zone', nullable: true})
     date: Date;
 
-    @Column({type: 'date'})
+    @Column({type: 'timestamp without time zone', nullable: true})
     dueDate: Date;
 
     @Column({type: 'float'})
