@@ -8,7 +8,7 @@ import { BaseEntity } from "../../entities/base.entity";
 export class Payment extends BaseEntity implements PaymentInterface{
     
     
-    @Column({type: 'date'})
+    @Column({type: 'timestamp without time zone', nullable: true})
     date: Date;
     
     @Column({type: 'float'})
