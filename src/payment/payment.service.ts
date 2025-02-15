@@ -65,7 +65,10 @@ export class PaymentService {
 
   findAll(accountId: string|undefined) {
     if(accountId) {
-      return this.paymentRepository.find({where: {account: {id: accountId}}});
+      return this.paymentRepository.find({
+        where: {account: {id: accountId}},
+        relations: ['user']
+      });
     }
     return this.paymentRepository.find();
   }
