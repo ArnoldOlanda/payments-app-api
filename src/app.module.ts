@@ -11,6 +11,8 @@ import { PaymentModule } from './payment/payment.module';
 import { AuthModule } from './auth/auth.module';
 import { SeedModule } from './seed/seed.module';
 import { FilesModule } from './files/files.module';
+import { ReportModule } from './report/report.module';
+import { PrinterModule } from './printer/printer.module';
 
 
 @Module({
@@ -20,7 +22,7 @@ import { FilesModule } from './files/files.module';
       isGlobal: true,
     }),
     TypeOrmModule.forRoot(dataSource), 
-    UserModule, RoleModule, ZoneModule, CustomerModule, AccountModule, PaymentModule, AuthModule, SeedModule, FilesModule
+    UserModule, RoleModule, ZoneModule, CustomerModule, AccountModule, PaymentModule, AuthModule, SeedModule, FilesModule, ReportModule, PrinterModule
   ],
   controllers: [],
   providers: [],
