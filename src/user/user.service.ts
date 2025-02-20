@@ -99,10 +99,10 @@ export class UserService {
 
   async update(id: string, updateUserDto: UpdateUserDto) {
     const {zones, ...rest} = updateUserDto;
-
-    if(rest.password){ // Si se cambio la contraseña, encriptar
-      rest.password = encryptPassword(rest.password);
-    }
+    
+    // if(rest.password.length > 0){ // Si se cambio la contraseña, encriptar
+    //   rest.password = encryptPassword(rest.password);
+    // } 
 
     const userZones: Zone[] = [];
     zones.forEach(async(zone) => {
@@ -113,9 +113,12 @@ export class UserService {
       userZones.push(zoneFound);
     });
 
+    const userDb = await this.userRepository.findOne({where: {id}});
+
     const user = await this.userRepository.preload({
       id,
       ...rest,
+      password: rest.password ? encryptPassword(rest.password): userDb.password,
       zones: userZones
     });
 
