@@ -1,6 +1,22 @@
+import { format } from "@formkit/tempo";
 import { TDocumentDefinitions } from "pdfmake/interfaces";
+import { capitalize } from "src/helpers/capitalize";
 
-export const fichaReport = ():TDocumentDefinitions =>{
+interface PDFData{
+    user: string;
+    daysWeek: Date[];
+    accounts: any[];
+}
+
+export const fichaReport = (data: PDFData):TDocumentDefinitions =>{
+    
+    
+    const datesFormated = data.daysWeek.map(d=>capitalize(format(d, 'dddd D')));
+    const dateNumberStart = format(data.daysWeek[0], 'D');
+    const dateNumberEnd = format(data.daysWeek[data.daysWeek.length-1], 'D');
+    const monthName = capitalize(format(data.daysWeek[0], 'MMMM'));
+    const yearName = format(data.daysWeek[0], 'YYYY');
+
     return {
         pageOrientation: 'landscape',
         header: {
@@ -27,7 +43,7 @@ export const fichaReport = ():TDocumentDefinitions =>{
                         fontSize: 12,
                     },
                     {
-                        text: 'Semana: 10-16 de Febrero de 2025',
+                        text: `Semana: ${dateNumberStart}-${dateNumberEnd} de ${monthName} de ${yearName}`,
                         style: 'header',
                         alignment: 'right',
                         bold: true,
@@ -48,8 +64,26 @@ export const fichaReport = ():TDocumentDefinitions =>{
                     widths:['auto', '*', 'auto', 'auto', 'auto', 'auto', 'auto', 'auto', 'auto', 'auto', 'auto', 'auto', 'auto', 'auto'],
                     headerRows: 1,
                     body: [
-                        ['Nro','Apellidos y nombres', 'Tipo Credito', 'Fecha cred.', 'Fecha venc.', 'Monto', 'Restante', 'Lun 10', 'Mar 11', 'Mié 12', 'Jue 13', 'Vie 14', 'Sáb 15', 'Dom 16'],
-                        ['1','Arnold Olanda', 'Diario','22/02/2025', '22/03/2025', 'S/ 1000', 'S/ 500',  '', '', '', '', '', '', '']
+                        ['Nro','Apellidos y nombres', 'Tipo Credito', 'Fecha cred.', 'Fecha venc.', 'Monto', 'Restante', ...datesFormated],
+                        ...data.accounts.map((a,i)=>{
+                            return [
+                                i+1,
+                                a.customer.name + ' ' + a.customer.lastName,
+                                a.creditType,
+                                format(a.date, 'DD/MM/YYYY'),
+                                format(a.dueDate, 'DD/MM/YYYY'),
+                                a.amount,
+                                a.remainingBalance,
+                                '',
+                                '',
+                                '',
+                                '',
+                                '',
+                                '',
+                                ''
+                            ]
+                        }),
+                        // ['1','Arnold Olanda', 'Diario','22/02/2025', '22/03/2025', 'S/ 1000', 'S/ 500',  '', '', '', '', '', '', '']
                         
                     ]
                 }

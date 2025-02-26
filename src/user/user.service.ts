@@ -8,6 +8,7 @@ import { Role } from 'src/role/entities/role.entity';
 import { encryptPassword } from 'src/helpers/encryptPassword';
 import { Zone } from 'src/zone/entities/zone.entity';
 import { Payment } from 'src/payment/entities/payment.entity';
+import { AccountStatus } from 'src/account/enums/account-status.enum';
 
 @Injectable()
 export class UserService {
@@ -180,5 +181,36 @@ export class UserService {
       .getRawMany();
 
     return payments;
+  }
+
+  async getAccounts(userId: string) {
+    const user = await this.userRepository.findOne({where: {id: userId}});
+    if (!user) {
+      throw new NotFoundException(`User with id ${userId} not found`);
+    }
+    
+    const userDb = await this.userRepository.createQueryBuilder('user')
+      .leftJoinAndSelect('user.zones', 'zone')
+      .leftJoinAndSelect('zone.customers', 'customer')
+      .leftJoinAndSelect('customer.accounts', 'account')
+      .where('account.status = :status', { status: AccountStatus.ACTIVE })
+      .andWhere('user.id = :userId', { userId })
+      .getOne();
+
+    const accounts = userDb.zones.flatMap((zone) => {
+      return zone.customers.flatMap((customer) => {
+        return customer.accounts.map((account) => ({
+          ...account,
+          customer,
+          zone,
+          zoneId: zone.id,
+        }));
+      });
+    });
+  
+
+    console.log(accounts);
+  
+    return accounts;
   }
 }

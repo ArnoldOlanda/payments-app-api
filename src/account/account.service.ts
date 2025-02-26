@@ -104,4 +104,17 @@ export class AccountService {
     await this.accountRepository.softDelete(id);
     return `Account deleted successfully`;
   }
+
+  async getAccountsByCustomer(userId: string) {
+    
+    const query = this.accountRepository.createQueryBuilder('account')
+      .leftJoinAndSelect('account.customer', 'customer')
+      .leftJoinAndSelect('customer.zone', 'zone')
+      .leftJoinAndSelect('zone.users', 'user');
+
+    query.where('account.status = :status', { status: AccountStatus.ACTIVE });
+    // query.andWhere('user.id = :userId', { userId });
+
+    return query.getMany();
+  }
 }
