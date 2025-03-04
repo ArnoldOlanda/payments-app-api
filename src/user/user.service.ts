@@ -208,9 +208,6 @@ export class UserService {
       });
     });
   
-
-    console.log(accounts);
-  
     return accounts;
   }
 }
