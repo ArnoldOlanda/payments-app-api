@@ -11,7 +11,7 @@ interface PDFData{
 export const fichaReport = (data: PDFData):TDocumentDefinitions =>{
     
     
-    const datesFormated = data.daysWeek.map(d=>capitalize(format(d, 'dddd D','es-ES')));
+    const datesFormated = data.daysWeek.map(d=>capitalize(format(d, 'ddd DD','es-ES')));
     const dateNumberStart = format(data.daysWeek[0], 'D', 'es-ES');
     const dateNumberEnd = format(data.daysWeek[data.daysWeek.length-1], 'D', 'es-ES');
     const monthName = capitalize(format(data.daysWeek[0], 'MMMM','es-ES'));
