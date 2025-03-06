@@ -74,7 +74,7 @@ export class PaymentService {
   }
 
   async findOne(id: string) {
-    const payment = await this.paymentRepository.findOne({where: {id}});
+    const payment = await this.paymentRepository.findOne({where: {id}, relations: ['account']});
     if(!payment) {
       throw new NotFoundException(`Payment with id ${id} not found`);
     }
@@ -94,7 +94,10 @@ export class PaymentService {
   }
 
   async remove(id: string) {
-    await this.findOne(id);
+    const payment = await this.findOne(id);
+    payment.account.remainingBalance += payment.amount;
+
+    await this.accountRepository.save(payment.account);
     await this.paymentRepository.softDelete(id);
     return `Payment deleted successfully`;
   }

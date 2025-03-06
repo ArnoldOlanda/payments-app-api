@@ -4,7 +4,6 @@ import { CreateAccountDto } from './dto/create-account.dto';
 import { UpdateAccountDto } from './dto/update-account.dto';
 import { Auth } from 'src/auth/decorators/auth.decorator';
 import { ValidRole } from 'src/auth/enums/validRoles.enum';
-import { AccountStatus } from './enums/account-status.enum';
 import { PaginateAccountDto } from './dto/paginate-account.dto';
 
 @Controller('account')

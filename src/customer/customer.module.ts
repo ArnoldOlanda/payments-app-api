@@ -5,14 +5,15 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { Zone } from 'src/zone/entities/zone.entity';
 import { Customer } from './entities/customer.entity';
 import { Account } from 'src/account/entities/account.entity';
+import { AccountModule } from 'src/account/account.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([
-      Account,
       Customer,
       Zone,
     ]),
+    AccountModule,
   ],
   controllers: [CustomerController],
   providers: [CustomerService],

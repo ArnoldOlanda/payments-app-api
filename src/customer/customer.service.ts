@@ -6,17 +6,17 @@ import { Customer } from './entities/customer.entity';
 import { Repository } from 'typeorm';
 import { Zone } from 'src/zone/entities/zone.entity';
 import { Account } from 'src/account/entities/account.entity';
+import { AccountService } from 'src/account/account.service';
 
 @Injectable()
 export class CustomerService {
 
   constructor(
-    @InjectRepository(Account)
-    private readonly accountRepository: Repository<Account>,
     @InjectRepository(Customer)
     private readonly customerRepository: Repository<Customer>,
     @InjectRepository(Zone)
     private readonly zoneRepository: Repository<Zone>,
+    private readonly accountService: AccountService,
   ) {}
 
   async create(createCustomerDto: CreateCustomerDto) {
@@ -24,9 +24,8 @@ export class CustomerService {
       let zone = null;
       if (createCustomerDto.zoneId) {
         zone = await this.zoneRepository.findOne({ where: { id: createCustomerDto.zoneId } });
-        if (!zone) {
+        if (!zone) 
           throw new NotFoundException(`Zone with id ${createCustomerDto.zoneId} not found`);
-        }
       }
       const customer = this.customerRepository.create({
         ...createCustomerDto,
@@ -37,7 +36,7 @@ export class CustomerService {
       return savedCustomer;
     } catch (error) {
       if(error.code === '23505') {
-        throw new ConflictException('Email or document number already exists');
+        throw new ConflictException('El correo o el documento ya esta en uso');
       }
       throw error;
     }
@@ -50,63 +49,50 @@ export class CustomerService {
   async findOne(id: string) {
     const customer = await this.customerRepository.findOne({where: {id}});
 
-    if (!customer) {
-      throw new NotFoundException('Customer not found');
-    }
-
+    if (!customer) throw new NotFoundException('Customer not found');
+    
     return customer;
   }
 
   async findCredits(id: string) {
-    const customer = await this.customerRepository.findOne({where: {id}});
-    if (!customer) {
-      throw new NotFoundException('Customer not found');
-    }
-
-    const accounts = await this.accountRepository.find({
-      where: {customer: { id }},
-      relations: ['customer']
+    const customer = await this.customerRepository.findOne({
+      where: {id},
+      relations: ['accounts']
     });
 
-    return accounts;
+    if (!customer) throw new NotFoundException('Customer not found');
+    
+    return customer.accounts;
   }
 
   async update(id: string, updateCustomerDto: UpdateCustomerDto) {
     const zone = await this.zoneRepository.findOne({where: {id: updateCustomerDto.zoneId}});
 
-    if (!zone) {
-      throw new NotFoundException('Zone not found');
-    }
-
+    if (!zone) throw new NotFoundException('Zone not found');
+    
     const customer = await this.customerRepository.preload({
       id,
       ...updateCustomerDto,
       zone: zone ?? null
     });
 
-    if (!customer) {
-      throw new NotFoundException('Customer not found');
-    }
-
+    if (!customer) throw new NotFoundException('Customer not found');
+    
     return await this.customerRepository.save(customer);
   }
 
   async remove(id: string) {
-      const customer = await this.customerRepository.findOne({where: {id}});
-    
-      if (!customer) {
-        throw new NotFoundException('Customer not found');
-      }
-
-      const accounts = await this.accountRepository.find({
-        where: {customer: { id }},
-        relations: ['customer']
+      const customer = await this.customerRepository.findOne({
+        where: {id}, 
+        relations:['accounts']
       });
+    
+      if (!customer) throw new NotFoundException('Customer not found');
       
-      //Delete all accounts related to customer (soft delete)
-      for (const account of accounts) {
-        await this.accountRepository.softDelete(account.id);
-      }
+      //Delete all accounts and payments 
+      await Promise.all(
+        customer.accounts.map(account => this.accountService.remove(account.id))
+      );
 
       await this.customerRepository.softDelete(id);
     

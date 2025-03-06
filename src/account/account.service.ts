@@ -7,6 +7,7 @@ import { Account } from './entities/account.entity';
 import { Customer } from 'src/customer/entities/customer.entity';
 import { AccountStatus } from './enums/account-status.enum';
 import { PaginateAccountDto } from './dto/paginate-account.dto';
+import { Payment } from 'src/payment/entities/payment.entity';
 
 @Injectable()
 export class AccountService {
@@ -16,6 +17,8 @@ export class AccountService {
     private readonly accountRepository: Repository<Account>,
     @InjectRepository(Customer)
     private readonly customerRepository: Repository<Customer>,
+    @InjectRepository(Payment)
+    private readonly paymentRepository: Repository<Payment>,
   ) {}
 
   async create(createAccountDto: CreateAccountDto) {
@@ -100,7 +103,12 @@ export class AccountService {
   }
 
   async remove(id: string) {
-    await this.findOne(id);
+    const account = await this.findOne(id);
+    
+    await Promise.all(
+      account.payments.map(payment => this.paymentRepository.softDelete(payment.id))
+    );
+
     await this.accountRepository.softDelete(id);
     return `Account deleted successfully`;
   }
