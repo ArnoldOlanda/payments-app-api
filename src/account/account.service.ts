@@ -47,7 +47,7 @@ export class AccountService {
     }
 
     if(zoneId) {
-      query.where('zone.id = :zoneId', {zoneId});
+      query.andWhere('zone.id = :zoneId', {zoneId});
     }
 
 
