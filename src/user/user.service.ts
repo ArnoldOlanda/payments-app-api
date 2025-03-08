@@ -183,7 +183,7 @@ export class UserService {
     return payments;
   }
 
-  async getAccounts(userId: string) {
+  async getAccounts(userId: string, zoneId: string) {
     const user = await this.userRepository.findOne({where: {id: userId}});
     if (!user) {
       throw new NotFoundException(`User with id ${userId} not found`);
@@ -195,6 +195,7 @@ export class UserService {
       .leftJoinAndSelect('customer.accounts', 'account')
       .where('account.status = :status', { status: AccountStatus.ACTIVE })
       .andWhere('user.id = :userId', { userId })
+      .andWhere('zone.id = :zoneId', { zoneId })
       .getOne();
 
     const accounts = userDb.zones.flatMap((zone) => {

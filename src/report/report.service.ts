@@ -31,11 +31,11 @@ export class ReportService {
         return diasSemana;
     }
 
-    async getFichaPagos(request: Request) {
+    async getFichaPagos(request: Request, zoneId: string) {
         
         //@ts-ignore
         const id = request.user.id;
-        const accounts = await this.userService.getAccounts(id);
+        const accounts = await this.userService.getAccounts(id, zoneId);
         
         const daysWeek = await this.getDaysWeek();
         const docDefinitions= fichaReport({user: 'Arnold Olanda', daysWeek, accounts});
