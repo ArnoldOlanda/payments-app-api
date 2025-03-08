@@ -12,5 +12,6 @@ import { Zone } from './entities/zone.entity';
   ],
   controllers: [ZoneController],
   providers: [ZoneService],
+  exports: [ZoneService],
 })
 export class ZoneModule {}

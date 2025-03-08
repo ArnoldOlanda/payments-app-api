@@ -198,6 +198,10 @@ export class UserService {
       .andWhere('zone.id = :zoneId', { zoneId })
       .getOne();
 
+    if(!userDb) {
+      return [];
+    }
+      
     const accounts = userDb.zones.flatMap((zone) => {
       return zone.customers.flatMap((customer) => {
         return customer.accounts.map((account) => ({

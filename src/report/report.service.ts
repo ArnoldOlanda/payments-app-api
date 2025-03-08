@@ -5,6 +5,7 @@ import { addDay, weekEnd, weekStart } from '@formkit/tempo';
 import { Request } from 'express';
 import { AccountService } from 'src/account/account.service';
 import { UserService } from '../user/user.service';
+import { ZoneService } from 'src/zone/zone.service';
 
 @Injectable()
 export class ReportService {
@@ -12,6 +13,7 @@ export class ReportService {
     constructor(
         private readonly printerService: PrinterService,
         private readonly userService: UserService,
+        private readonly zoneService: ZoneService,
     ) {}
 
     
@@ -35,10 +37,20 @@ export class ReportService {
         
         //@ts-ignore
         const id = request.user.id;
+        //@ts-ignore
+        const name = request.user.name;
+
+        const zone = await this.zoneService.findOne(zoneId);
+
         const accounts = await this.userService.getAccounts(id, zoneId);
         
         const daysWeek = await this.getDaysWeek();
-        const docDefinitions= fichaReport({user: 'Arnold Olanda', daysWeek, accounts});
+        const docDefinitions= fichaReport({
+            user: name,
+            zone: zone.name,
+            daysWeek, 
+            accounts
+        });
 
         return this.printerService.createPdf(docDefinitions);
     }

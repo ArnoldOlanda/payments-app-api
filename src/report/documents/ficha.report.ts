@@ -4,6 +4,7 @@ import { capitalize } from "src/helpers/capitalize";
 
 interface PDFData{
     user: string;
+    zone: string;
     daysWeek: Date[];
     accounts: any[];
 }
@@ -36,7 +37,7 @@ export const fichaReport = (data: PDFData):TDocumentDefinitions =>{
             {
                 columns: [
                     {
-                        text: 'Zona: Zona 1',
+                        text: 'Zona: ' + data.zone,
                         style: 'header',
                         alignment: 'left',
                         bold: true,
@@ -52,7 +53,7 @@ export const fichaReport = (data: PDFData):TDocumentDefinitions =>{
                 ]
             },
             {
-                text: 'Usuario: Arnold Olanda',
+                text: 'Usuario: ' + data.user,
                 bold: true,
                 fontSize: 12,
             },
