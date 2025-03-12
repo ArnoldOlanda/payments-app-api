@@ -13,6 +13,7 @@ import { SeedModule } from './seed/seed.module';
 import { FilesModule } from './files/files.module';
 import { ReportModule } from './report/report.module';
 import { PrinterModule } from './printer/printer.module';
+import { ScheduleModule } from '@nestjs/schedule';
 
 
 @Module({
@@ -22,6 +23,7 @@ import { PrinterModule } from './printer/printer.module';
       isGlobal: true,
     }),
     TypeOrmModule.forRoot(dataSource), 
+    ScheduleModule.forRoot(),
     UserModule, RoleModule, ZoneModule, CustomerModule, AccountModule, PaymentModule, AuthModule, SeedModule, FilesModule, ReportModule, PrinterModule
   ],
   controllers: [],

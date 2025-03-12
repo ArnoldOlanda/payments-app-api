@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { CreateAccountDto } from './dto/create-account.dto';
 import { UpdateAccountDto } from './dto/update-account.dto';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -8,10 +8,13 @@ import { Customer } from 'src/customer/entities/customer.entity';
 import { AccountStatus } from './enums/account-status.enum';
 import { PaginateAccountDto } from './dto/paginate-account.dto';
 import { Payment } from 'src/payment/entities/payment.entity';
+import { Cron, CronExpression } from '@nestjs/schedule';
+import { addDay, format, parse } from '@formkit/tempo';
 
 @Injectable()
 export class AccountService {
-  
+  private readonly logger = new Logger(AccountService.name);
+
   constructor(
     @InjectRepository(Account)
     private readonly accountRepository: Repository<Account>,
@@ -124,5 +127,30 @@ export class AccountService {
     // query.andWhere('user.id = :userId', { userId });
 
     return query.getMany();
+  }
+
+  @Cron(CronExpression.EVERY_DAY_AT_1AM)
+  async handleCron() {
+    const now = format({date: new Date(),format: "YYYY-MM-DD"});
+
+    const accounts = await this.accountRepository.find({
+      where: {
+        status: AccountStatus.ACTIVE,
+      }
+    });
+
+    let updated = 0;
+    for (const account of accounts) {
+      const dueDate = format({date: account.dueDate,format: "YYYY-MM-DD"});
+      // console.log({dueDate, now, finished: new Date(dueDate) <= new Date(now)});
+
+      if(new Date(dueDate) <= new Date(now)) {
+        account.status = AccountStatus.FINISHED;
+        await this.accountRepository.save(account);
+        updated++;
+      }
+    }
+
+    this.logger.log(`${updated} accounts status updated`);
   }
 }
