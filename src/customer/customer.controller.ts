@@ -1,7 +1,8 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, ParseUUIDPipe } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, ParseUUIDPipe, Query } from '@nestjs/common';
 import { CustomerService } from './customer.service';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
+import { PaginationDto } from './dto/pagination.dto';
 import { ValidRole } from 'src/auth/enums/validRoles.enum';
 import { Auth } from 'src/auth/decorators/auth.decorator';
 
@@ -17,8 +18,8 @@ export class CustomerController {
 
   @Get()
   @Auth(ValidRole.ADMIN)
-  findAll() {
-    return this.customerService.findAll();
+  findAll(@Query() paginationDto: PaginationDto) {
+    return this.customerService.findAll(paginationDto);
   }
 
   @Get(':id')

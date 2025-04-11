@@ -1,12 +1,12 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Customer } from './entities/customer.entity';
-import { Repository } from 'typeorm';
-import { Zone } from 'src/zone/entities/zone.entity';
-import { Account } from 'src/account/entities/account.entity';
+import { PaginationDto } from './dto/pagination.dto';
 import { AccountService } from 'src/account/account.service';
+import { Customer } from './entities/customer.entity';
+import { Zone } from 'src/zone/entities/zone.entity';
 
 @Injectable()
 export class CustomerService {
@@ -42,8 +42,26 @@ export class CustomerService {
     }
   }
 
-  findAll() {
-    return this.customerRepository.find({relations: ['zone']});
+  async findAll(paginationDto: PaginationDto) {
+    if (!paginationDto.page && !paginationDto.limit) {
+      return this.customerRepository.find({
+        relations: ['zone']
+      });
+    }
+    
+    const { page, limit } = paginationDto;
+    const skip = (page - 1) * limit;
+    
+    const [data, total] = await this.customerRepository.findAndCount({
+      relations: ['zone'],
+      skip,
+      take: limit,
+    });
+
+    return {
+      data,
+      total
+    };
   }
 
   async findOne(id: string) {

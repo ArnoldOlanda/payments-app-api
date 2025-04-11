@@ -1,4 +1,4 @@
-import { IsArray, IsEmail, IsNotEmpty, IsOptional, IsString, IsUUID, Length } from "class-validator";
+import { IsEmail, IsNotEmpty, IsOptional, IsString, IsUUID, Length } from "class-validator";
 
 export class CreateCustomerDto {
     
@@ -21,7 +21,7 @@ export class CreateCustomerDto {
 
     @IsOptional()
     @IsString()
-    @Length(9,15)
+    @Length(9,15,{message: 'El número de teléfono debe tener 9 caracteres'})
     phone?: string;
 
     @IsOptional()
