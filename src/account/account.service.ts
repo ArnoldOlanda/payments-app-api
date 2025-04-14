@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { CreateAccountDto } from './dto/create-account.dto';
 import { UpdateAccountDto } from './dto/update-account.dto';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -10,6 +10,8 @@ import { PaginateAccountDto } from './dto/paginate-account.dto';
 import { Payment } from 'src/payment/entities/payment.entity';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { addDay, format, parse } from '@formkit/tempo';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { Cache } from 'cache-manager';
 
 @Injectable()
 export class AccountService {
@@ -22,6 +24,7 @@ export class AccountService {
     private readonly customerRepository: Repository<Customer>,
     @InjectRepository(Payment)
     private readonly paymentRepository: Repository<Payment>,
+    @Inject(CACHE_MANAGER) private cacheManager: Cache,
   ) {}
 
   async create(createAccountDto: CreateAccountDto) {
@@ -37,11 +40,22 @@ export class AccountService {
       customer,
     });
 
+    await this.invalidateCache();
     return this.accountRepository.save(account);
   }
 
-  async findAll({ zoneId, status, page, limit, search, order, sortBy }: PaginateAccountDto) {
+  async findAll(paginationDto: PaginateAccountDto) {
+    const cacheKey = `accounts:${JSON.stringify(paginationDto)}`;
 
+    // Verificar si tenemos estos resultados en caché
+    const cachedData = await this.cacheManager.get(cacheKey);
+    
+    if (cachedData) {
+      this.logger.log('Returning cached data');
+      return cachedData;
+    }
+
+    const { zoneId, status, page, limit, search, order, sortBy } = paginationDto;
     const skip = (page - 1) * limit;
     const query = this.accountRepository.createQueryBuilder('account')
       .leftJoinAndSelect('account.customer', 'customer')
@@ -71,7 +85,7 @@ export class AccountService {
 
     const [accounts, total] = await query.getManyAndCount();
 
-    return {
+    const results = {
       data: accounts,
       meta:{
         total,
@@ -80,6 +94,10 @@ export class AccountService {
         currentPage: page,
       }
     };
+
+    await this.cacheManager.set(cacheKey, results);
+    
+    return results;
   }
 
   findOne(id: string) {
@@ -102,6 +120,8 @@ export class AccountService {
     if(!account) {
       throw new NotFoundException(`Account with id ${id} not found`);
     }
+
+    await this.invalidateCache();
     return this.accountRepository.save(account);
   }
 
@@ -113,11 +133,18 @@ export class AccountService {
     );
 
     await this.accountRepository.softDelete(id);
+    await this.invalidateCache();
     return `Account deleted successfully`;
   }
 
   async getAccountsByCustomer(userId: string) {
+    const cachedData = await this.cacheManager.get('accountsByCustomer');
     
+    if (cachedData) {
+      this.logger.log('Returning cached data');
+      return cachedData;
+    }
+
     const query = this.accountRepository.createQueryBuilder('account')
       .leftJoinAndSelect('account.customer', 'customer')
       .leftJoinAndSelect('customer.zone', 'zone')
@@ -152,5 +179,10 @@ export class AccountService {
     }
 
     this.logger.log(`${updated} accounts status updated`);
+  }
+
+  async invalidateCache() {
+    await this.cacheManager.del('accounts:*');
+    await this.cacheManager.del('accountsByCustomer');
   }
 }

@@ -1,4 +1,4 @@
-import { IsNumber, IsOptional, Min } from 'class-validator';
+import { IsNumber, IsOptional, IsUUID, Min, IsString } from 'class-validator';
 
 export class PaginationDto {
   @IsOptional()
@@ -10,4 +10,12 @@ export class PaginationDto {
   @IsNumber()
   @Min(1)
   limit?:number = 10;
+
+  @IsOptional()
+  @IsUUID('4')
+  zoneId?: string;
+
+  @IsOptional()
+  @IsString()
+  search?: string;
 }
