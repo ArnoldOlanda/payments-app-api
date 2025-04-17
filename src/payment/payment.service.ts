@@ -7,6 +7,7 @@ import { Payment } from './entities/payment.entity';
 import { Account } from 'src/account/entities/account.entity';
 import { AccountStatus } from 'src/account/enums/account-status.enum';
 import { User } from 'src/user/entities/user.entity';
+import { AccountService } from 'src/account/account.service';
 
 @Injectable()
 export class PaymentService {
@@ -18,6 +19,7 @@ export class PaymentService {
     private readonly paymentRepository: Repository<Payment>,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    private readonly accountService: AccountService,
   ) {}
 
   async create(createPaymentDto: CreatePaymentDto) {
@@ -27,21 +29,21 @@ export class PaymentService {
     const user = await this.userRepository.findOne({where: {id: createPaymentDto.userId}});
 
     if(!account) {
-      throw new NotFoundException(`Account with id ${accountId} not found`);
+      throw new NotFoundException(`Cuenta con id ${accountId} no encontrada`);
     }
 
     if(!user) {
-      throw new NotFoundException(`User with id ${createPaymentDto.userId} not found`);
+      throw new NotFoundException(`Usuario con id ${createPaymentDto.userId} no encontrado`);
     }
 
     if(account.status === AccountStatus.FINISHED) {
-      throw new NotFoundException(`Account with id ${accountId} is finished`);
+      throw new NotFoundException(`La cuenta con id ${accountId} está finalizada`);
     }
 
     const remainingBalance = account.remainingBalance;
     if(remainingBalance < createPaymentDto.amount) {
       throw new NotFoundException(
-        `The amount ${createPaymentDto.amount} is greater than the remaining balance ${remainingBalance}`
+        `El monto ${createPaymentDto.amount} es mayor que el saldo restante ${remainingBalance}`
       );
     }
 
@@ -60,6 +62,7 @@ export class PaymentService {
 
     const savedPayment = await this.paymentRepository.save(payment);
     await this.accountRepository.save(account);
+    await this.accountService.invalidateCache();
     return savedPayment;
   }
 
@@ -76,7 +79,7 @@ export class PaymentService {
   async findOne(id: string) {
     const payment = await this.paymentRepository.findOne({where: {id}, relations: ['account']});
     if(!payment) {
-      throw new NotFoundException(`Payment with id ${id} not found`);
+      throw new NotFoundException(`Pago con id ${id} no encontrado`);
     }
     return payment;
   }
@@ -88,7 +91,7 @@ export class PaymentService {
     });
 
     if(!payment) {
-      throw new NotFoundException(`Payment with id ${id} not found`);
+      throw new NotFoundException(`Pago con id ${id} no encontrado`);
     }
     return this.paymentRepository.save(payment);
   }
@@ -99,6 +102,6 @@ export class PaymentService {
 
     await this.accountRepository.save(payment.account);
     await this.paymentRepository.softDelete(id);
-    return `Payment deleted successfully`;
+    return `Pago eliminado con éxito`;
   }
 }
