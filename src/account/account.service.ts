@@ -9,13 +9,13 @@ import { AccountStatus } from './enums/account-status.enum';
 import { PaginateAccountDto } from './dto/paginate-account.dto';
 import { Payment } from 'src/payment/entities/payment.entity';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { addDay, format, parse } from '@formkit/tempo';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
 
 @Injectable()
 export class AccountService {
   private readonly logger = new Logger(AccountService.name);
+  private readonly cacheKeys = new Set<string>();
 
   constructor(
     @InjectRepository(Account)
@@ -98,12 +98,13 @@ export class AccountService {
     };
 
     await this.cacheManager.set(cacheKey, results);
+    this.cacheKeys.add(cacheKey);
 
     return results;
   }
 
-  findOne(id: string) {
-    const account = this.accountRepository.findOne({
+  async findOne(id: string) {
+    const account = await this.accountRepository.findOne({
       where: { id },
       relations: ['customer', 'payments'],
     });
@@ -142,7 +143,8 @@ export class AccountService {
   }
 
   async getAccountsByCustomer(userId: string) {
-    const cachedData = await this.cacheManager.get('accountsByCustomer');
+    const cacheKey = 'accountsByCustomer';
+    const cachedData = await this.cacheManager.get(cacheKey);
 
     if (cachedData) {
       this.logger.log('Returning cached data');
@@ -156,38 +158,42 @@ export class AccountService {
       .leftJoinAndSelect('zone.users', 'user');
 
     query.where('account.status = :status', { status: AccountStatus.ACTIVE });
-    // query.andWhere('user.id = :userId', { userId });
+    query.andWhere('user.id = :userId', { userId });
 
-    return query.getMany();
+    const results = await query.getMany();
+    await this.cacheManager.set(cacheKey, results);
+    this.cacheKeys.add(cacheKey);
+    return results;
   }
 
   @Cron(CronExpression.EVERY_DAY_AT_1AM)
   async handleCron() {
-    const now = format({ date: new Date(), format: 'YYYY-MM-DD' });
+    try {
+      const result = await this.accountRepository
+        .createQueryBuilder()
+        .update(Account)
+        .set({ status: AccountStatus.FINISHED })
+        .where('status = :active', { active: AccountStatus.ACTIVE })
+        .andWhere('dueDate IS NOT NULL')
+        .andWhere('dueDate <= CURRENT_DATE')
+        .execute();
 
-    const accounts = await this.accountRepository.find({
-      where: {
-        status: AccountStatus.ACTIVE,
-      },
-    });
-
-    let updated = 0;
-    for (const account of accounts) {
-      const dueDate = format({ date: account.dueDate, format: 'YYYY-MM-DD' });
-      // console.log({dueDate, now, finished: new Date(dueDate) <= new Date(now)});
-
-      if (new Date(dueDate) <= new Date(now)) {
-        account.status = AccountStatus.FINISHED;
-        await this.accountRepository.save(account);
-        updated++;
+      const updated = result.affected ?? 0;
+      this.logger.log(`${updated} accounts status updated`);
+      if (updated > 0) {
+        await this.invalidateCache();
       }
+    } catch (error) {
+      this.logger.error(
+        'handleCron failed to mark overdue accounts as FINISHED',
+        error instanceof Error ? error.stack : String(error),
+      );
     }
-
-    this.logger.log(`${updated} accounts status updated`);
   }
 
   async invalidateCache() {
-    await this.cacheManager.del('accounts:*');
-    await this.cacheManager.del('accountsByCustomer');
+    const keys = Array.from(this.cacheKeys);
+    this.cacheKeys.clear();
+    await Promise.all(keys.map((key) => this.cacheManager.del(key)));
   }
 }
