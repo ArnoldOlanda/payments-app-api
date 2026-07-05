@@ -21,6 +21,7 @@ import { Customer } from './entities/customer.entity';
 export class CustomerService {
   //logger
   private readonly logger = new Logger(CustomerService.name);
+  private readonly cacheKeys = new Set<string>();
 
   constructor(
     @InjectRepository(Customer)
@@ -101,6 +102,7 @@ export class CustomerService {
       const results = await queryBuilder.getMany();
       // Guardar en caché los resultados
       await this.cacheManager.set(cacheKey, results);
+      this.cacheKeys.add(cacheKey);
       return results;
     }
 
@@ -125,6 +127,7 @@ export class CustomerService {
 
     // Guardar en caché los resultados
     await this.cacheManager.set(cacheKey, result);
+    this.cacheKeys.add(cacheKey);
 
     return result;
   }
@@ -149,16 +152,20 @@ export class CustomerService {
   }
 
   async update(id: string, updateCustomerDto: UpdateCustomerDto) {
-    const zone = await this.zoneRepository.findOne({
-      where: { id: updateCustomerDto.zoneId },
-    });
+    if (
+      updateCustomerDto.zoneId !== undefined &&
+      updateCustomerDto.zoneId !== null
+    ) {
+      const zone = await this.zoneRepository.findOne({
+        where: { id: updateCustomerDto.zoneId },
+      });
 
-    if (!zone) throw new NotFoundException('Zone not found');
+      if (!zone) throw new NotFoundException('Zone not found');
+    }
 
     const customer = await this.customerRepository.preload({
       id,
       ...updateCustomerDto,
-      zone: zone ?? null,
     });
 
     if (!customer) throw new NotFoundException('Customer not found');
@@ -190,7 +197,8 @@ export class CustomerService {
 
   // Método para invalidar la caché cuando se crea, actualiza o elimina un cliente
   async invalidateCache(): Promise<void> {
-    // Clear all cache entries that match the pattern
-    await this.cacheManager.del('customers:*');
+    const keys = Array.from(this.cacheKeys);
+    this.cacheKeys.clear();
+    await Promise.all(keys.map((key) => this.cacheManager.del(key)));
   }
 }
