@@ -186,7 +186,7 @@ export class UserService {
       .innerJoin('c.zone', 'z')
       .select('z.name', 'zone')
       .addSelect('SUM(p.amount)', 'total')
-      .where('p.date = CURRENT_DATE')
+      .where('DATE(p.date) = CURRENT_DATE')
       .andWhere('p.userId = :userId', { userId })
       .groupBy('z.id')
       .getRawMany();
