@@ -25,8 +25,11 @@ export class AuthController {
   ) {}
 
   @Post('login')
-  login(@Body() createAuthDto: CreateAuthDto, @Res() res: Response) {
-    return this.authService.validate(createAuthDto, res);
+  async login(
+    @Body() createAuthDto: CreateAuthDto,
+    @Res() res: Response,
+  ) {
+    await this.authService.validate(createAuthDto, res);
   }
 
   @Post('refresh-token')
@@ -42,7 +45,7 @@ export class AuthController {
     }
     const result = await this.authService.refreshToken(refreshToken);
     res.cookie('refresh_token', result.refresh_token, buildCookieOptions());
-    return res.status(200).json(result);
+    res.status(200).json(result);
   }
 
   // Rate limit: 3 requests per IP per 15 minutes
