@@ -4,6 +4,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ScheduleModule } from '@nestjs/schedule';
 import { CacheModule } from '@nestjs/cache-manager';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { dataSource } from './config/data-source';
 import { RoleModule } from './role/role.module';
 import { ZoneModule } from './zone/zone.module';
@@ -15,6 +16,7 @@ import { SeedModule } from './seed/seed.module';
 import { FilesModule } from './files/files.module';
 import { ReportModule } from './report/report.module';
 import { PrinterModule } from './printer/printer.module';
+import { MailModule } from './mail/mail.module';
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -22,12 +24,31 @@ import { PrinterModule } from './printer/printer.module';
       isGlobal: true,
     }),
     CacheModule.register({
-      isGlobal:true,
-      ttl: 1000 * 60 * 60 * 24 , // 1 day in milliseconds
+      isGlobal: true,
+      ttl: 1000 * 60 * 60 * 24, // 1 day in milliseconds
     }),
-    TypeOrmModule.forRoot(dataSource), 
+    TypeOrmModule.forRoot(dataSource),
     ScheduleModule.forRoot(),
-    UserModule, RoleModule, ZoneModule, CustomerModule, AccountModule, PaymentModule, AuthModule, SeedModule, FilesModule, ReportModule, PrinterModule
+    ThrottlerModule.forRoot({
+      throttlers: [
+        {
+          ttl: 60_000,
+          limit: 20, // default global limit: 20 req/min per IP
+        },
+      ],
+    }),
+    UserModule,
+    RoleModule,
+    ZoneModule,
+    CustomerModule,
+    AccountModule,
+    PaymentModule,
+    AuthModule,
+    SeedModule,
+    FilesModule,
+    ReportModule,
+    PrinterModule,
+    MailModule,
   ],
   controllers: [],
   providers: [],
