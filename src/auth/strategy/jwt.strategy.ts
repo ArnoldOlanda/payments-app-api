@@ -12,7 +12,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
 
-    configService: ConfigService
+    configService: ConfigService,
   ) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(), // Extrae el token del encabezado Authorization: Bearer <token>
@@ -24,10 +24,13 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   // Este método valida el token decodificado (el payload)
   async validate(payload: { id: string }) {
     // Aquí podrías hacer más validaciones o cargar el usuario desde la base de datos
-    const user = await this.userRepository.findOne({ where: { id: payload.id }, relations:['role'] });
+    const user = await this.userRepository.findOne({
+      where: { id: payload.id },
+      relations: ['role'],
+    });
     if (!user) {
       throw new UnauthorizedException('Token no válido');
-    }    
-    return { ...user, role: user.role.name } ;
+    }
+    return { ...user, role: user.role.name };
   }
 }
