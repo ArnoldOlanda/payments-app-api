@@ -6,6 +6,7 @@ import * as crypto from 'crypto';
 import { PasswordResetToken } from '../entities/password-reset-token.entity';
 import { User } from 'src/user/entities/user.entity';
 import { MailService } from 'src/mail/mail.service';
+import { AuthService } from '../auth.service';
 import { encryptPassword } from 'src/helpers/encryptPassword';
 
 const TOKEN_BYTES = 32; // 256 bits of entropy
@@ -24,6 +25,7 @@ export class PasswordResetService {
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
     private readonly mailService: MailService,
+    private readonly authService: AuthService,
   ) {}
 
   async requestReset(email: string): Promise<void> {
@@ -86,6 +88,11 @@ export class PasswordResetService {
 
     token.usedAt = new Date();
     await this.tokenRepo.save(token);
+
+    // Invalidate all active refresh tokens for this user so any attacker
+    // holding a previously-issued refresh token can no longer mint new
+    // sessions after the credential change.
+    await this.authService.revokeAllForUser(user.id);
 
     this.logger.log(`Password reset successful for user ${user.id}`);
   }
