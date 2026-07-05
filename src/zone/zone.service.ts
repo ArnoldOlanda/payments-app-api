@@ -7,7 +7,6 @@ import { Repository } from 'typeorm';
 
 @Injectable()
 export class ZoneService {
-
   constructor(
     @InjectRepository(Zone)
     private readonly zoneRepository: Repository<Zone>,
@@ -18,12 +17,12 @@ export class ZoneService {
   }
 
   findAll() {
-    return this.zoneRepository.find({relations: ['customers']});
+    return this.zoneRepository.find({ relations: ['customers'] });
   }
 
   async findOne(id: string) {
-    const zone = await this.zoneRepository.findOne({where: {id}});
-    if(!zone) {
+    const zone = await this.zoneRepository.findOne({ where: { id } });
+    if (!zone) {
       throw new NotFoundException(`Zone with id ${id} not found`);
     }
 
@@ -33,7 +32,7 @@ export class ZoneService {
   async update(id: string, updateZoneDto: UpdateZoneDto) {
     const zone = await this.zoneRepository.preload({
       id,
-      ...updateZoneDto
+      ...updateZoneDto,
     });
 
     if (!zone) {
@@ -48,7 +47,7 @@ export class ZoneService {
       await this.zoneRepository.softDelete(id);
       return 'Zone deleted successfully';
     } catch (error) {
-      if(error instanceof NotFoundException) {
+      if (error instanceof NotFoundException) {
         throw new NotFoundException(`Zone with id ${id} not found`);
       }
       throw error;

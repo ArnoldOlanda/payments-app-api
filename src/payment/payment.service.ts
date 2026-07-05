@@ -11,7 +11,6 @@ import { AccountService } from 'src/account/account.service';
 
 @Injectable()
 export class PaymentService {
-
   constructor(
     @InjectRepository(Account)
     private readonly accountRepository: Repository<Account>,
@@ -23,40 +22,47 @@ export class PaymentService {
   ) {}
 
   async create(createPaymentDto: CreatePaymentDto) {
+    const { accountId } = createPaymentDto;
+    const account = await this.accountRepository.findOne({
+      where: { id: accountId },
+    });
+    const user = await this.userRepository.findOne({
+      where: { id: createPaymentDto.userId },
+    });
 
-    const { accountId } = createPaymentDto
-    const account = await this.accountRepository.findOne({where: {id: accountId}});
-    const user = await this.userRepository.findOne({where: {id: createPaymentDto.userId}});
-
-    if(!account) {
+    if (!account) {
       throw new NotFoundException(`Cuenta con id ${accountId} no encontrada`);
     }
 
-    if(!user) {
-      throw new NotFoundException(`Usuario con id ${createPaymentDto.userId} no encontrado`);
+    if (!user) {
+      throw new NotFoundException(
+        `Usuario con id ${createPaymentDto.userId} no encontrado`,
+      );
     }
 
-    if(account.status === AccountStatus.FINISHED) {
-      throw new NotFoundException(`La cuenta con id ${accountId} está finalizada`);
+    if (account.status === AccountStatus.FINISHED) {
+      throw new NotFoundException(
+        `La cuenta con id ${accountId} está finalizada`,
+      );
     }
 
     const remainingBalance = account.remainingBalance;
-    if(remainingBalance < createPaymentDto.amount) {
+    if (remainingBalance < createPaymentDto.amount) {
       throw new NotFoundException(
-        `El monto ${createPaymentDto.amount} es mayor que el saldo restante ${remainingBalance}`
+        `El monto ${createPaymentDto.amount} es mayor que el saldo restante ${remainingBalance}`,
       );
     }
 
     const payment = this.paymentRepository.create({
       ...createPaymentDto,
       account,
-      user
+      user,
     });
 
     //Update remaining balance
     const restAmount = remainingBalance - createPaymentDto.amount;
     account.remainingBalance = restAmount;
-    if(restAmount === 0){
+    if (restAmount === 0) {
       account.status = AccountStatus.FINISHED;
     }
 
@@ -66,19 +72,22 @@ export class PaymentService {
     return savedPayment;
   }
 
-  findAll(accountId: string|undefined) {
-    if(accountId) {
+  findAll(accountId: string | undefined) {
+    if (accountId) {
       return this.paymentRepository.find({
-        where: {account: {id: accountId}},
-        relations: ['user']
+        where: { account: { id: accountId } },
+        relations: ['user'],
       });
     }
     return this.paymentRepository.find();
   }
 
   async findOne(id: string) {
-    const payment = await this.paymentRepository.findOne({where: {id}, relations: ['account']});
-    if(!payment) {
+    const payment = await this.paymentRepository.findOne({
+      where: { id },
+      relations: ['account'],
+    });
+    if (!payment) {
       throw new NotFoundException(`Pago con id ${id} no encontrado`);
     }
     return payment;
@@ -90,7 +99,7 @@ export class PaymentService {
       ...updatePaymentDto,
     });
 
-    if(!payment) {
+    if (!payment) {
       throw new NotFoundException(`Pago con id ${id} no encontrado`);
     }
     return this.paymentRepository.save(payment);

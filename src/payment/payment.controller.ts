@@ -1,4 +1,14 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, ParseUUIDPipe, Query } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+  ParseUUIDPipe,
+  Query,
+} from '@nestjs/common';
 import { PaymentService } from './payment.service';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { UpdatePaymentDto } from './dto/update-payment.dto';
@@ -17,9 +27,7 @@ export class PaymentController {
 
   @Get()
   @Auth(ValidRole.ADMIN, ValidRole.PRESTAMISTA)
-  findAll(
-    @Query('accountId', ParseUUIDPipe) accountId: string,
-  ) {
+  findAll(@Query('accountId', ParseUUIDPipe) accountId: string) {
     return this.paymentService.findAll(accountId);
   }
 
@@ -32,8 +40,8 @@ export class PaymentController {
   @Patch(':id')
   @Auth(ValidRole.ADMIN)
   update(
-    @Param('id', ParseUUIDPipe) id: string, 
-    @Body() updatePaymentDto: UpdatePaymentDto
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() updatePaymentDto: UpdatePaymentDto,
   ) {
     return this.paymentService.update(id, updatePaymentDto);
   }

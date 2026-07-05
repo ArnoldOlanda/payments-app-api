@@ -8,14 +8,7 @@ import { Zone } from 'src/zone/entities/zone.entity';
 import { Payment } from 'src/payment/entities/payment.entity';
 
 @Module({
-  imports: [
-    TypeOrmModule.forFeature([
-      User,
-      Role,
-      Zone,
-      Payment
-    ]),
-  ],
+  imports: [TypeOrmModule.forFeature([User, Role, Zone, Payment])],
   controllers: [UserController],
   providers: [UserService],
   exports: [UserService, TypeOrmModule],

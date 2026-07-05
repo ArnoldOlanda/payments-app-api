@@ -1,4 +1,4 @@
 export enum ValidRole {
-    ADMIN = 'Admin',
-    PRESTAMISTA = 'Prestamista',
+  ADMIN = 'Admin',
+  PRESTAMISTA = 'Prestamista',
 }

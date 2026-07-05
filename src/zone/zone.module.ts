@@ -5,11 +5,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { Zone } from './entities/zone.entity';
 
 @Module({
-  imports: [
-    TypeOrmModule.forFeature([
-      Zone,
-    ]),
-  ],
+  imports: [TypeOrmModule.forFeature([Zone])],
   controllers: [ZoneController],
   providers: [ZoneService],
   exports: [ZoneService],

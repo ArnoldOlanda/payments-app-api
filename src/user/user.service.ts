@@ -1,4 +1,8 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -12,9 +16,8 @@ import { AccountStatus } from 'src/account/enums/account-status.enum';
 
 @Injectable()
 export class UserService {
-  
   constructor(
-    @InjectRepository(User) 
+    @InjectRepository(User)
     private readonly userRepository: Repository<User>,
     @InjectRepository(Role)
     private readonly roleRepository: Repository<Role>,
@@ -25,10 +28,12 @@ export class UserService {
   ) {}
 
   async create(createUserDto: CreateUserDto) {
-    const {zones, ...rest} = createUserDto;
+    const { zones, ...rest } = createUserDto;
     try {
-      const role = await this.roleRepository.findOne({where: {id: createUserDto.role_id}});
-    
+      const role = await this.roleRepository.findOne({
+        where: { id: createUserDto.role_id },
+      });
+
       if (!role) {
         throw new NotFoundException('Role not found');
       }
@@ -36,18 +41,18 @@ export class UserService {
       const user = this.userRepository.create({
         ...rest,
         role,
-        password: encryptPassword(createUserDto.password)
+        password: encryptPassword(createUserDto.password),
       });
-      
+
       const savedUser = await this.userRepository.save(user);
 
-      if(zones) {
+      if (zones) {
         await this.assingZones(savedUser.id, zones);
       }
 
       return savedUser;
-    } catch (error:any) {
-      if(error.code === '23505') {
+    } catch (error: any) {
+      if (error.code === '23505') {
         throw new ConflictException('Email already exists');
       }
       throw error;
@@ -55,80 +60,81 @@ export class UserService {
   }
 
   findAll() {
-    return this.userRepository.find({relations: ['zones']});
+    return this.userRepository.find({ relations: ['zones'] });
   }
 
   async findCustomers(userId: string) {
     const user = await this.userRepository.findOne({
-      where: {id: userId},
-      relations: ['zones','zones.customers']
+      where: { id: userId },
+      relations: ['zones', 'zones.customers'],
     });
     if (!user) {
       throw new NotFoundException('User not found');
     }
 
-    const customers = user.zones.flatMap(zone => 
-      zone.customers.map(customer => ({
+    const customers = user.zones.flatMap((zone) =>
+      zone.customers.map((customer) => ({
         ...customer,
         zone,
-        zoneId: zone.id
-      }))
+        zoneId: zone.id,
+      })),
     );
 
     return customers;
   }
 
   async findOne(id: string) {
-
-    const user = await this.userRepository.findOne({where: {id}});
+    const user = await this.userRepository.findOne({ where: { id } });
 
     if (!user) {
       throw new NotFoundException('User not found');
     }
 
-    return this.userRepository.findOne({where: {id}});
+    return this.userRepository.findOne({ where: { id } });
   }
 
   async findBy(field: keyof User, value: string) {
-    
     return this.userRepository.findOne({
-      where: {[field]: value}, 
+      where: { [field]: value },
       select: ['id', 'name', 'email', 'password'],
-      relations: ['zones']
+      relations: ['zones'],
     });
   }
 
   async update(id: string, updateUserDto: UpdateUserDto) {
-    const {zones, ...rest} = updateUserDto;
-    
-    // if(rest.password.length > 0){ // Si se cambio la contraseña, encriptar
-    //   rest.password = encryptPassword(rest.password);
-    // } 
+    const { zones, ...rest } = updateUserDto;
 
-    const userZones: Zone[] = [];
-    zones.forEach(async(zone) => {
-      const zoneFound = await this.zoneRepository.findOne({where: {id: zone}});
-      if(!zoneFound) {
-        throw new NotFoundException(`Zone with id ${zone} not found`);
-      }
-      userZones.push(zoneFound);
-    });
+    // Validate ALL zones concurrently, but await Promise.all so we don't
+    // race the preload() below with potentially-missing zone lookups.
+    const userZones: Zone[] = await Promise.all(
+      zones.map(async (zone) => {
+        const zoneFound = await this.zoneRepository.findOne({
+          where: { id: zone },
+        });
+        if (!zoneFound) {
+          throw new NotFoundException(`Zone with id ${zone} not found`);
+        }
+        return zoneFound;
+      }),
+    );
 
-    const userDb = await this.userRepository.findOne({where: {id}});
+    const userDb = await this.userRepository.findOne({ where: { id } });
 
     const user = await this.userRepository.preload({
       id,
       ...rest,
-      password: rest.password ? encryptPassword(rest.password): userDb.password,
-      zones: userZones
+      password: rest.password
+        ? encryptPassword(rest.password)
+        : userDb.password,
+      zones: userZones,
     });
 
     return this.userRepository.save(user);
   }
 
   async remove(id: string) {
-    const user = await this.userRepository.findOne({where: {id}});
-    
+    const user = await this.userRepository.findOne({ where: { id } });
+
     if (!user) {
       throw new NotFoundException('User not found');
     }
@@ -138,38 +144,43 @@ export class UserService {
     return 'User deleted successfully';
   }
 
-  async assingZones(userId: string, zoneIds: string[]){
+  async assingZones(userId: string, zoneIds: string[]) {
     const user = await this.userRepository.findOne({
       where: { id: userId },
-      relations: ['zones'], 
+      relations: ['zones'],
     });
-  
+
     if (!user) {
       throw new NotFoundException(`User with id ${userId} not found`);
     }
-  
+
     // Validar las zonas
-    const zones = await this.zoneRepository.findBy({id: In(zoneIds)});
-  
+    const zones = await this.zoneRepository.findBy({ id: In(zoneIds) });
+
     if (zones.length !== zoneIds.length) {
-      const invalidIds = zoneIds.filter((id) => !zones.find((zone) => zone.id === id));
-      throw new NotFoundException(`Zones with ids ${invalidIds.join(', ')} not found`);
+      const invalidIds = zoneIds.filter(
+        (id) => !zones.find((zone) => zone.id === id),
+      );
+      throw new NotFoundException(
+        `Zones with ids ${invalidIds.join(', ')} not found`,
+      );
     }
-  
+
     // Asignar las zonas al usuario
     user.zones = zones;
-  
+
     // Guardar cambios
     return this.userRepository.save(user);
   }
 
   async totalPaymentsToday(userId: string) {
-    const user = await this.userRepository.findOne({where: {id: userId}});
+    const user = await this.userRepository.findOne({ where: { id: userId } });
     if (!user) {
       throw new NotFoundException(`User with id ${userId} not found`);
     }
 
-    const payments = this.paymentRepository.createQueryBuilder('p')
+    const payments = this.paymentRepository
+      .createQueryBuilder('p')
       .innerJoin('p.account', 'a')
       .innerJoin('a.customer', 'c')
       .innerJoin('c.zone', 'z')
@@ -184,12 +195,13 @@ export class UserService {
   }
 
   async getAccounts(userId: string, zoneId: string) {
-    const user = await this.userRepository.findOne({where: {id: userId}});
+    const user = await this.userRepository.findOne({ where: { id: userId } });
     if (!user) {
       throw new NotFoundException(`User with id ${userId} not found`);
     }
-    
-    const userDb = await this.userRepository.createQueryBuilder('user')
+
+    const userDb = await this.userRepository
+      .createQueryBuilder('user')
       .leftJoinAndSelect('user.zones', 'zone')
       .leftJoinAndSelect('zone.customers', 'customer')
       .leftJoinAndSelect('customer.accounts', 'account')
@@ -198,10 +210,10 @@ export class UserService {
       .andWhere('zone.id = :zoneId', { zoneId })
       .getOne();
 
-    if(!userDb) {
+    if (!userDb) {
       return [];
     }
-      
+
     const accounts = userDb.zones.flatMap((zone) => {
       return zone.customers.flatMap((customer) => {
         return customer.accounts.map((account) => ({
@@ -212,7 +224,7 @@ export class UserService {
         }));
       });
     });
-  
+
     return accounts;
   }
 }

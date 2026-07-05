@@ -8,7 +8,7 @@ import { User } from 'src/user/entities/user.entity';
 import { AccountModule } from 'src/account/account.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Account,Payment,User]),AccountModule],
+  imports: [TypeOrmModule.forFeature([Account, Payment, User]), AccountModule],
   controllers: [PaymentController],
   providers: [PaymentService],
 })

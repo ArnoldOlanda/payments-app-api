@@ -6,7 +6,6 @@ import { Repository } from 'typeorm';
 
 @Injectable()
 export class SeedService {
-
   constructor(
     @InjectRepository(Role)
     private readonly roleRepository: Repository<Role>,
@@ -16,9 +15,8 @@ export class SeedService {
   ) {}
 
   async executeSeed() {
-
-    await this.roleRepository.insert({  name: 'Admin' });
-    await this.roleRepository.insert({  name: 'Prestamista' });
+    await this.roleRepository.insert({ name: 'Admin' });
+    await this.roleRepository.insert({ name: 'Prestamista' });
 
     await this.userRepository.insert({
       name: 'Admin',
@@ -31,7 +29,9 @@ export class SeedService {
       name: 'Prestamista',
       email: 'prestamista@email.com',
       password: 'prestamista',
-      role: await this.roleRepository.findOne({ where: { name: 'Prestamista' } }),
+      role: await this.roleRepository.findOne({
+        where: { name: 'Prestamista' },
+      }),
     });
 
     return `Seed executed successfully`;

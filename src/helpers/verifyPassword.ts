@@ -1,4 +1,4 @@
-import * as bcrypt from 'bcrypt';
+import * as bcrypt from 'bcryptjs';
 
 export const verifyPassword = (password: string, hash: string) => {
   return bcrypt.compareSync(password, hash);

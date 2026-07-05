@@ -17,7 +17,7 @@ export class ReportController {
   ) {
     response.setHeader('Content-Type', 'application/pdf');
     const pdfDoc = await this.reportService.getFichaPagos(request, zoneId);
-    
+
     pdfDoc.info.Title = 'Ficha de Pagos';
     pdfDoc.pipe(response);
     pdfDoc.end();

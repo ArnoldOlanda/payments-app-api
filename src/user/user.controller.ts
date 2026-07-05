@@ -1,4 +1,13 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, ParseUUIDPipe } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+  ParseUUIDPipe,
+} from '@nestjs/common';
 import { UserService } from './user.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -31,8 +40,8 @@ export class UserController {
   @Patch(':id')
   @Auth(ValidRole.ADMIN)
   update(
-    @Param('id', ParseUUIDPipe) id: string, 
-    @Body() updateUserDto: UpdateUserDto
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() updateUserDto: UpdateUserDto,
   ) {
     return this.userService.update(id, updateUserDto);
   }
@@ -42,12 +51,12 @@ export class UserController {
   remove(@Param('id') id: string) {
     return this.userService.remove(id);
   }
-  
+
   @Patch(':id/zones')
   @Auth(ValidRole.ADMIN)
   assingZones(
-    @Param('id', ParseUUIDPipe) id: string, 
-    @Body() assignZonesDto: AssignZonesDto
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() assignZonesDto: AssignZonesDto,
   ) {
     return this.userService.assingZones(id, assignZonesDto.zones_id);
   }

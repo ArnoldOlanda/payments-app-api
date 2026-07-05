@@ -7,7 +7,6 @@ import { Repository } from 'typeorm';
 
 @Injectable()
 export class RoleService {
-
   constructor(
     @InjectRepository(Role)
     private readonly roleRepository: Repository<Role>,
@@ -22,19 +21,19 @@ export class RoleService {
   }
 
   async findOne(id: string) {
-    const role = await this.roleRepository.findOne({where: {id}});
-  
+    const role = await this.roleRepository.findOne({ where: { id } });
+
     if (!role) {
       throw new NotFoundException('Role not found');
     }
-    
-    return this.roleRepository.findOne({where: {id}});
+
+    return this.roleRepository.findOne({ where: { id } });
   }
 
   async update(id: string, updateRoleDto: UpdateRoleDto) {
     const role = await this.roleRepository.preload({
       id,
-      ...updateRoleDto
+      ...updateRoleDto,
     });
 
     if (!role) {
@@ -45,7 +44,7 @@ export class RoleService {
   }
 
   async remove(id: string) {
-    const role = await this.roleRepository.findOne({where: {id}});
+    const role = await this.roleRepository.findOne({ where: { id } });
     if (!role) {
       throw new NotFoundException('Role not found');
     }

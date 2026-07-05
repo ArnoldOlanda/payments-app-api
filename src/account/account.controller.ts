@@ -1,4 +1,14 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, ParseUUIDPipe, Query } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+  ParseUUIDPipe,
+  Query,
+} from '@nestjs/common';
 import { AccountService } from './account.service';
 import { CreateAccountDto } from './dto/create-account.dto';
 import { UpdateAccountDto } from './dto/update-account.dto';
@@ -18,9 +28,7 @@ export class AccountController {
 
   @Get()
   @Auth(ValidRole.ADMIN, ValidRole.PRESTAMISTA)
-  findAll(
-    @Query() paginateAccountDto: PaginateAccountDto,
-  ) {
+  findAll(@Query() paginateAccountDto: PaginateAccountDto) {
     return this.accountService.findAll(paginateAccountDto);
   }
 
@@ -33,8 +41,8 @@ export class AccountController {
   @Patch(':id')
   @Auth(ValidRole.ADMIN, ValidRole.PRESTAMISTA)
   update(
-    @Param('id', ParseUUIDPipe) id: string, 
-    @Body() updateAccountDto: UpdateAccountDto
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() updateAccountDto: UpdateAccountDto,
   ) {
     return this.accountService.update(id, updateAccountDto);
   }

@@ -1,8 +1,8 @@
-import { Role } from "src/role/entities/role.entity";
+import { Role } from 'src/role/entities/role.entity';
 
 export interface UserInterface {
-    id: string;
-    name: string;
-    email: string;
-    password: string;
+  id: string;
+  name: string;
+  email: string;
+  password: string;
 }

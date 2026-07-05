@@ -30,8 +30,10 @@ export class AccountService {
   async create(createAccountDto: CreateAccountDto) {
     const { customerId, amount } = createAccountDto;
 
-    const customer = await this.customerRepository.findOne({where: {id: customerId}});
-    if(!customer) {
+    const customer = await this.customerRepository.findOne({
+      where: { id: customerId },
+    });
+    if (!customer) {
       throw new NotFoundException(`Customer with id ${customerId} not found`);
     }
     const account = this.accountRepository.create({
@@ -49,27 +51,27 @@ export class AccountService {
 
     // Verificar si tenemos estos resultados en caché
     const cachedData = await this.cacheManager.get(cacheKey);
-    
+
     if (cachedData) {
       this.logger.log('Returning cached data');
       return cachedData;
     }
 
-    const { zoneId, status, page, limit, search, order, sortBy } = paginationDto;
+    const { zoneId, status, page, limit, search, order, sortBy } =
+      paginationDto;
     const skip = (page - 1) * limit;
-    const query = this.accountRepository.createQueryBuilder('account')
+    const query = this.accountRepository
+      .createQueryBuilder('account')
       .leftJoinAndSelect('account.customer', 'customer')
       .leftJoinAndSelect('customer.zone', 'zone');
 
-
-    if(status) {
-      query.where('account.status = :status', {status});
+    if (status) {
+      query.where('account.status = :status', { status });
     }
 
-    if(zoneId) {
-      query.andWhere('zone.id = :zoneId', {zoneId});
+    if (zoneId) {
+      query.andWhere('zone.id = :zoneId', { zoneId });
     }
-
 
     // if (search) {
     //   queryBuilder.where('item.name LIKE :search', { search: `%${search}%` });
@@ -87,25 +89,25 @@ export class AccountService {
 
     const results = {
       data: accounts,
-      meta:{
+      meta: {
         total,
         limit,
         totalPages: Math.ceil(total / limit),
         currentPage: page,
-      }
+      },
     };
 
     await this.cacheManager.set(cacheKey, results);
-    
+
     return results;
   }
 
   findOne(id: string) {
     const account = this.accountRepository.findOne({
       where: { id },
-      relations: ['customer','payments'],
+      relations: ['customer', 'payments'],
     });
-    if(!account) {
+    if (!account) {
       throw new NotFoundException(`Account with id ${id} not found`);
     }
     return account;
@@ -117,7 +119,7 @@ export class AccountService {
       ...updateAccountDto,
     });
 
-    if(!account) {
+    if (!account) {
       throw new NotFoundException(`Account with id ${id} not found`);
     }
 
@@ -127,9 +129,11 @@ export class AccountService {
 
   async remove(id: string) {
     const account = await this.findOne(id);
-    
+
     await Promise.all(
-      account.payments.map(payment => this.paymentRepository.softDelete(payment.id))
+      account.payments.map((payment) =>
+        this.paymentRepository.softDelete(payment.id),
+      ),
     );
 
     await this.accountRepository.softDelete(id);
@@ -139,13 +143,14 @@ export class AccountService {
 
   async getAccountsByCustomer(userId: string) {
     const cachedData = await this.cacheManager.get('accountsByCustomer');
-    
+
     if (cachedData) {
       this.logger.log('Returning cached data');
       return cachedData;
     }
 
-    const query = this.accountRepository.createQueryBuilder('account')
+    const query = this.accountRepository
+      .createQueryBuilder('account')
       .leftJoinAndSelect('account.customer', 'customer')
       .leftJoinAndSelect('customer.zone', 'zone')
       .leftJoinAndSelect('zone.users', 'user');
@@ -158,20 +163,20 @@ export class AccountService {
 
   @Cron(CronExpression.EVERY_DAY_AT_1AM)
   async handleCron() {
-    const now = format({date: new Date(),format: "YYYY-MM-DD"});
+    const now = format({ date: new Date(), format: 'YYYY-MM-DD' });
 
     const accounts = await this.accountRepository.find({
       where: {
         status: AccountStatus.ACTIVE,
-      }
+      },
     });
 
     let updated = 0;
     for (const account of accounts) {
-      const dueDate = format({date: account.dueDate,format: "YYYY-MM-DD"});
+      const dueDate = format({ date: account.dueDate, format: 'YYYY-MM-DD' });
       // console.log({dueDate, now, finished: new Date(dueDate) <= new Date(now)});
 
-      if(new Date(dueDate) <= new Date(now)) {
+      if (new Date(dueDate) <= new Date(now)) {
         account.status = AccountStatus.FINISHED;
         await this.accountRepository.save(account);
         updated++;

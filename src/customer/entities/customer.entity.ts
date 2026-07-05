@@ -14,37 +14,36 @@ import { Account } from '../../account/entities/account.entity';
 
 @Entity('customer')
 export class Customer extends BaseEntity implements CustomerInterface {
+  @Column({ type: 'varchar', length: 10, unique: true })
+  documentNumber: string;
 
-    @Column({ type: 'varchar', length: 10, unique: true })
-    documentNumber: string;
+  @Column({ type: 'varchar', length: 100 })
+  name: string;
 
-    @Column({ type: 'varchar', length: 100 })
-    name: string;
+  @Column({ type: 'varchar', length: 100 })
+  lastName: string;
 
-    @Column({ type: 'varchar', length: 100 })
-    lastName: string;
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  address: string;
 
-    @Column({ type: 'varchar', length: 100, nullable: true })
-    address: string;
+  @Column({ type: 'varchar', length: 15, nullable: true })
+  phone: string;
 
-    @Column({ type: 'varchar', length: 15, nullable: true })
-    phone: string;
+  @Column({ type: 'varchar', length: 50, nullable: true, unique: true })
+  email: string;
 
-    @Column({ type: 'varchar', length: 50, nullable: true, unique: true })
-    email: string;
+  @ManyToOne(() => Zone, (zone) => zone.customers, { nullable: true })
+  zone: Zone;
 
-    @ManyToOne(() => Zone, (zone) => zone.customers, { nullable: true })
-    zone: Zone;
+  @OneToMany(() => Account, (account) => account.customer)
+  accounts: Account[];
 
-    @OneToMany(()=>Account, (account)=>account.customer)
-    accounts: Account[];
+  @CreateDateColumn({ select: false })
+  createdAt: Date;
 
-    @CreateDateColumn({ select: false })
-    createdAt: Date;
+  @UpdateDateColumn({ select: false })
+  updatedAt: Date;
 
-    @UpdateDateColumn({ select: false })
-    updatedAt: Date;
-
-    @DeleteDateColumn({ select: false })
-    deletedAt: Date;
+  @DeleteDateColumn({ select: false })
+  deletedAt: Date;
 }
