@@ -68,4 +68,19 @@ export class AuthController {
     );
     return { message: 'Password has been reset successfully' };
   }
+
+  @Post('logout')
+  @HttpCode(200)
+  async logout(
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+    @Body() body: RefreshTokenDto,
+  ): Promise<{ message: string }> {
+    // logout(undefined) is a no-op — safe to always call so the cookie is
+    // always cleared even when the caller had no token to revoke.
+    const refreshToken = req.cookies?.refresh_token || body?.refresh_token;
+    await this.authService.logout(refreshToken);
+    res.clearCookie('refresh_token');
+    return { message: 'Logged out' };
+  }
 }
