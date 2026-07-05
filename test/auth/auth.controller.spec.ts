@@ -21,6 +21,7 @@ describe('AuthController (e2e-style, mocked services)', () => {
           useValue: {
             validate: jest.fn(),
             refreshToken: jest.fn(),
+            logout: jest.fn().mockResolvedValue(undefined),
           },
         },
         {
@@ -186,6 +187,40 @@ describe('AuthController (e2e-style, mocked services)', () => {
       expect(authService.refreshToken).toHaveBeenCalledWith(
         'cookie-token-from-web',
       );
+    });
+  });
+
+  // ---------- logout ----------
+
+  describe('POST /auth/logout', () => {
+    it('should call authService.logout with the body refresh_token (mobile flow)', async () => {
+      await request(app.getHttpServer())
+        .post('/auth/logout')
+        .send({ refresh_token: 'mobile-refresh-token' })
+        .expect(200)
+        .expect({ message: 'Logged out' });
+
+      expect(authService.logout).toHaveBeenCalledWith('mobile-refresh-token');
+    });
+
+    it('should call authService.logout with the cookie refresh_token (web flow)', async () => {
+      const agent = request.agent(app.getHttpServer());
+      await agent
+        .post('/auth/logout')
+        .set('Cookie', 'refresh_token=web-cookie-token')
+        .send({})
+        .expect(200);
+
+      expect(authService.logout).toHaveBeenCalledWith('web-cookie-token');
+    });
+
+    it('should still return 200 even when no refresh token is presented', async () => {
+      await request(app.getHttpServer())
+        .post('/auth/logout')
+        .send({})
+        .expect(200);
+
+      expect(authService.logout).toHaveBeenCalledWith(undefined);
     });
   });
 });

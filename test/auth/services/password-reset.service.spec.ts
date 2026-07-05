@@ -9,12 +9,14 @@ import { PasswordResetService } from 'src/auth/services/password-reset.service';
 import { PasswordResetToken } from 'src/auth/entities/password-reset-token.entity';
 import { User } from 'src/user/entities/user.entity';
 import { MailService } from 'src/mail/mail.service';
+import { AuthService } from 'src/auth/auth.service';
 
 describe('PasswordResetService', () => {
   let service: PasswordResetService;
   let tokenRepo: jest.Mocked<Repository<PasswordResetToken>>;
   let userRepo: jest.Mocked<Repository<User>>;
   let mailService: jest.Mocked<MailService>;
+  let authService: jest.Mocked<Pick<AuthService, 'revokeAllForUser'>>;
 
   const hashToken = (token: string) =>
     crypto.createHash('sha256').update(token).digest('hex');
@@ -46,6 +48,12 @@ describe('PasswordResetService', () => {
             sendPasswordResetEmail: jest.fn().mockResolvedValue(undefined),
           },
         },
+        {
+          provide: AuthService,
+          useValue: {
+            revokeAllForUser: jest.fn().mockResolvedValue(undefined),
+          },
+        },
       ],
     }).compile();
 
@@ -53,6 +61,7 @@ describe('PasswordResetService', () => {
     tokenRepo = module.get(getRepositoryToken(PasswordResetToken));
     userRepo = module.get(getRepositoryToken(User));
     mailService = module.get(MailService);
+    authService = module.get(AuthService) as any;
   });
 
   describe('requestReset()', () => {
@@ -157,6 +166,38 @@ describe('PasswordResetService', () => {
       }
 
       expect(userRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('should revoke all refresh tokens for the user after a successful reset', async () => {
+      const future = new Date(Date.now() + 60 * 60 * 1000);
+      tokenRepo.findOne.mockResolvedValue({
+        id: 'token-1',
+        userId: 'user-1',
+        tokenHash,
+        expiresAt: future,
+        usedAt: null,
+      } as any);
+      userRepo.findOne.mockResolvedValue({
+        id: 'user-1',
+        password: 'old-hash',
+      } as any);
+
+      await service.resetPassword(rawToken, 'newPass123');
+
+      expect(authService.revokeAllForUser).toHaveBeenCalledTimes(1);
+      expect(authService.revokeAllForUser).toHaveBeenCalledWith('user-1');
+    });
+
+    it('should not revoke refresh tokens when the reset fails', async () => {
+      tokenRepo.findOne.mockResolvedValue(null);
+
+      try {
+        await service.resetPassword('bogus', 'newPass123');
+      } catch {
+        // expected
+      }
+
+      expect(authService.revokeAllForUser).not.toHaveBeenCalled();
     });
   });
 });
