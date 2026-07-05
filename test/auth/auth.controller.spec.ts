@@ -55,33 +55,47 @@ describe('AuthController (e2e-style, mocked services)', () => {
   // ---------- forgot-password ----------
 
   describe('POST /auth/forgot-password', () => {
-    it('should return 200 and call service.requestReset with the email', async () => {
+    it('should return 200 and call service.requestReset with email + client=web', async () => {
       await request(app.getHttpServer())
         .post('/auth/forgot-password')
-        .send({ email: 'user@example.com' })
+        .send({ email: 'user@example.com', client: 'web' })
         .expect(200)
         .expect({ message: 'If the email exists, a reset link has been sent' });
 
       expect(passwordResetService.requestReset).toHaveBeenCalledWith(
         'user@example.com',
+        'web',
+      );
+    });
+
+    it('should pass client=mobile through to the service', async () => {
+      await request(app.getHttpServer())
+        .post('/auth/forgot-password')
+        .send({ email: 'user@example.com', client: 'mobile' })
+        .expect(200);
+
+      expect(passwordResetService.requestReset).toHaveBeenCalledWith(
+        'user@example.com',
+        'mobile',
       );
     });
 
     it('should always return 200 even when user does not exist (no leak)', async () => {
       await request(app.getHttpServer())
         .post('/auth/forgot-password')
-        .send({ email: 'ghost@example.com' })
+        .send({ email: 'ghost@example.com', client: 'web' })
         .expect(200);
 
       expect(passwordResetService.requestReset).toHaveBeenCalledWith(
         'ghost@example.com',
+        'web',
       );
     });
 
     it('should return 400 when email is missing (ValidationPipe)', async () => {
       await request(app.getHttpServer())
         .post('/auth/forgot-password')
-        .send({})
+        .send({ client: 'web' })
         .expect(400);
 
       expect(passwordResetService.requestReset).not.toHaveBeenCalled();
@@ -90,7 +104,25 @@ describe('AuthController (e2e-style, mocked services)', () => {
     it('should return 400 when email is malformed', async () => {
       await request(app.getHttpServer())
         .post('/auth/forgot-password')
-        .send({ email: 'not-an-email' })
+        .send({ email: 'not-an-email', client: 'web' })
+        .expect(400);
+
+      expect(passwordResetService.requestReset).not.toHaveBeenCalled();
+    });
+
+    it('should return 400 when client is missing', async () => {
+      await request(app.getHttpServer())
+        .post('/auth/forgot-password')
+        .send({ email: 'user@example.com' })
+        .expect(400);
+
+      expect(passwordResetService.requestReset).not.toHaveBeenCalled();
+    });
+
+    it('should return 400 when client is not "web" or "mobile"', async () => {
+      await request(app.getHttpServer())
+        .post('/auth/forgot-password')
+        .send({ email: 'user@example.com', client: 'desktop' })
         .expect(400);
 
       expect(passwordResetService.requestReset).not.toHaveBeenCalled();

@@ -6,6 +6,7 @@ import * as crypto from 'crypto';
 import * as bcrypt from 'bcryptjs';
 
 import { PasswordResetService } from 'src/auth/services/password-reset.service';
+import { PasswordResetClient } from 'src/auth/dto/forgot-password.dto';
 import { PasswordResetToken } from 'src/auth/entities/password-reset-token.entity';
 import { User } from 'src/user/entities/user.entity';
 import { MailService } from 'src/mail/mail.service';
@@ -71,16 +72,18 @@ describe('PasswordResetService', () => {
         email: 'user@example.com',
       } as any);
 
-      await service.requestReset('user@example.com');
+      await service.requestReset('user@example.com', PasswordResetClient.Web);
 
       expect(tokenRepo.create).toHaveBeenCalledTimes(1);
       expect(tokenRepo.save).toHaveBeenCalledTimes(1);
       expect(mailService.sendPasswordResetEmail).toHaveBeenCalledTimes(1);
 
-      const [to, tokenArg] = mailService.sendPasswordResetEmail.mock.calls[0];
+      const [to, tokenArg, clientArg] =
+        mailService.sendPasswordResetEmail.mock.calls[0];
       expect(to).toBe('user@example.com');
       expect(typeof tokenArg).toBe('string');
       expect(tokenArg.length).toBeGreaterThanOrEqual(32); // base64url(32 bytes) ≈ 43 chars
+      expect(clientArg).toBe(PasswordResetClient.Web);
     });
 
     it('should hash the token with sha256 before persisting', async () => {
@@ -89,7 +92,7 @@ describe('PasswordResetService', () => {
         email: 'x@y.com',
       } as any);
 
-      await service.requestReset('x@y.com');
+      await service.requestReset('x@y.com', PasswordResetClient.Mobile);
 
       const saved = tokenRepo.save.mock.calls[0][0] as any;
       expect(saved.tokenHash).toMatch(/^[a-f0-9]{64}$/); // sha256 hex
@@ -99,7 +102,7 @@ describe('PasswordResetService', () => {
       userRepo.findOne.mockResolvedValue(null);
 
       await expect(
-        service.requestReset('ghost@example.com'),
+        service.requestReset('ghost@example.com', PasswordResetClient.Web),
       ).resolves.toBeUndefined();
 
       expect(tokenRepo.create).not.toHaveBeenCalled();
@@ -110,7 +113,7 @@ describe('PasswordResetService', () => {
     it('should still call findOne (to keep response time constant) when user does not exist', async () => {
       userRepo.findOne.mockResolvedValue(null);
 
-      await service.requestReset('ghost@example.com');
+      await service.requestReset('ghost@example.com', PasswordResetClient.Web);
 
       expect(userRepo.findOne).toHaveBeenCalledTimes(1);
     });

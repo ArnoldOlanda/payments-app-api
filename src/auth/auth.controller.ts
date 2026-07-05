@@ -52,7 +52,10 @@ export class AuthController {
   async forgotPassword(
     @Body() forgotPasswordDto: ForgotPasswordDto,
   ): Promise<{ message: string }> {
-    await this.passwordResetService.requestReset(forgotPasswordDto.email);
+    await this.passwordResetService.requestReset(
+      forgotPasswordDto.email,
+      forgotPasswordDto.client,
+    );
     // Always 200, regardless of whether the email exists
     return { message: 'If the email exists, a reset link has been sent' };
   }

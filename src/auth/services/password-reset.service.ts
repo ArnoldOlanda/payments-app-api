@@ -8,6 +8,7 @@ import { User } from 'src/user/entities/user.entity';
 import { MailService } from 'src/mail/mail.service';
 import { AuthService } from '../auth.service';
 import { encryptPassword } from 'src/helpers/encryptPassword';
+import { PasswordResetClient } from '../dto/forgot-password.dto';
 
 const TOKEN_BYTES = 32; // 256 bits of entropy
 const DEFAULT_TTL_SECONDS = 3600; // 1 hour
@@ -28,7 +29,10 @@ export class PasswordResetService {
     private readonly authService: AuthService,
   ) {}
 
-  async requestReset(email: string): Promise<void> {
+  async requestReset(
+    email: string,
+    client: PasswordResetClient,
+  ): Promise<void> {
     // Always query the DB so timing is constant whether the user exists or not.
     const user = await this.userRepo.findOne({ where: { email } });
 
@@ -54,7 +58,11 @@ export class PasswordResetService {
     await this.tokenRepo.save(token);
 
     try {
-      await this.mailService.sendPasswordResetEmail(user.email, rawToken);
+      await this.mailService.sendPasswordResetEmail(
+        user.email,
+        rawToken,
+        client,
+      );
     } catch (error) {
       this.logger.error(
         `Failed to send password reset email for user ${user.id}`,
