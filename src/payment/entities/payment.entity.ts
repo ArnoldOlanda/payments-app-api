@@ -2,6 +2,7 @@ import {
   Entity,
   CreateDateColumn,
   ManyToOne,
+  JoinColumn,
   Column,
   UpdateDateColumn,
   DeleteDateColumn,
@@ -19,10 +20,22 @@ export class Payment extends BaseEntity implements PaymentInterface {
   @Column({ type: 'float' })
   amount: number;
 
-  @ManyToOne(() => Account, (account) => account.payments)
+  @Column({ type: 'uuid' })
+  accountId: string;
+
+  @ManyToOne(() => Account, (account) => account.payments, {
+    nullable: false,
+  })
+  @JoinColumn({ name: 'accountId' })
   account: Account;
 
-  @ManyToOne(() => User, (user) => user.payments)
+  @Column({ type: 'uuid', nullable: true })
+  userId: string | null;
+
+  @ManyToOne(() => User, (user) => user.payments, {
+    nullable: true,
+  })
+  @JoinColumn({ name: 'userId' })
   user: User;
 
   @CreateDateColumn({ select: false })

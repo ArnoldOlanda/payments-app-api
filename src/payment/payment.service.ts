@@ -1,13 +1,19 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { CreatePaymentDto } from './dto/create-payment.dto';
-import { UpdatePaymentDto } from './dto/update-payment.dto';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { Payment } from './entities/payment.entity';
+import { DataSource, Repository } from 'typeorm';
+
 import { Account } from 'src/account/entities/account.entity';
 import { AccountStatus } from 'src/account/enums/account-status.enum';
-import { User } from 'src/user/entities/user.entity';
 import { AccountService } from 'src/account/account.service';
+import { User } from 'src/user/entities/user.entity';
+
+import { CreatePaymentDto } from './dto/create-payment.dto';
+import { UpdatePaymentDto } from './dto/update-payment.dto';
+import { Payment } from './entities/payment.entity';
 
 @Injectable()
 export class PaymentService {
@@ -19,55 +25,60 @@ export class PaymentService {
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
     private readonly accountService: AccountService,
+    private readonly dataSource: DataSource,
   ) {}
 
   async create(createPaymentDto: CreatePaymentDto) {
-    const { accountId } = createPaymentDto;
-    const account = await this.accountRepository.findOne({
-      where: { id: accountId },
-    });
     const user = await this.userRepository.findOne({
       where: { id: createPaymentDto.userId },
     });
-
-    if (!account) {
-      throw new NotFoundException(`Cuenta con id ${accountId} no encontrada`);
-    }
-
     if (!user) {
       throw new NotFoundException(
         `Usuario con id ${createPaymentDto.userId} no encontrado`,
       );
     }
 
-    if (account.status === AccountStatus.FINISHED) {
-      throw new NotFoundException(
-        `La cuenta con id ${accountId} está finalizada`,
-      );
-    }
+    const savedPayment = await this.dataSource.transaction(async (manager) => {
+      const account = await manager.findOne(Account, {
+        where: { id: createPaymentDto.accountId },
+        lock: { mode: 'pessimistic_write' },
+      });
 
-    const remainingBalance = account.remainingBalance;
-    if (remainingBalance < createPaymentDto.amount) {
-      throw new NotFoundException(
-        `El monto ${createPaymentDto.amount} es mayor que el saldo restante ${remainingBalance}`,
-      );
-    }
+      if (!account) {
+        throw new NotFoundException(
+          `Cuenta con id ${createPaymentDto.accountId} no encontrada`,
+        );
+      }
 
-    const payment = this.paymentRepository.create({
-      ...createPaymentDto,
-      account,
-      user,
+      if (account.status === AccountStatus.FINISHED) {
+        throw new BadRequestException(
+          `La cuenta con id ${createPaymentDto.accountId} está finalizada`,
+        );
+      }
+
+      if (account.remainingBalance < createPaymentDto.amount) {
+        throw new BadRequestException(
+          `El monto ${createPaymentDto.amount} es mayor que el saldo restante ${account.remainingBalance}`,
+        );
+      }
+
+      const payment = manager.create(Payment, {
+        ...createPaymentDto,
+        account,
+        user,
+      });
+
+      const restAmount = account.remainingBalance - createPaymentDto.amount;
+      account.remainingBalance = restAmount;
+      if (restAmount === 0) {
+        account.status = AccountStatus.FINISHED;
+      }
+
+      const persisted = await manager.save(payment);
+      await manager.save(account);
+      return persisted;
     });
 
-    //Update remaining balance
-    const restAmount = remainingBalance - createPaymentDto.amount;
-    account.remainingBalance = restAmount;
-    if (restAmount === 0) {
-      account.status = AccountStatus.FINISHED;
-    }
-
-    const savedPayment = await this.paymentRepository.save(payment);
-    await this.accountRepository.save(account);
     await this.accountService.invalidateCache();
     return savedPayment;
   }
@@ -94,23 +105,111 @@ export class PaymentService {
   }
 
   async update(id: string, updatePaymentDto: UpdatePaymentDto) {
-    const payment = await this.paymentRepository.preload({
-      id,
-      ...updatePaymentDto,
+    const updated = await this.dataSource.transaction(async (manager) => {
+      const payment = await manager.findOne(Payment, {
+        where: { id },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!payment) {
+        throw new NotFoundException(`Pago con id ${id} no encontrado`);
+      }
+
+      if (
+        updatePaymentDto.accountId !== undefined &&
+        updatePaymentDto.accountId !== payment.accountId
+      ) {
+        throw new BadRequestException(
+          'No se permite transferir un pago entre cuentas',
+        );
+      }
+
+      const account = await manager.findOne(Account, {
+        where: { id: payment.accountId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!account) {
+        throw new NotFoundException(`Cuenta no encontrada`);
+      }
+
+      const previousAmount = payment.amount;
+      const newAmount = updatePaymentDto.amount ?? previousAmount;
+      if (newAmount < 0) {
+        throw new BadRequestException(`El monto no puede ser negativo`);
+      }
+
+      const newBalance = account.remainingBalance + previousAmount - newAmount;
+      if (newBalance < 0) {
+        throw new BadRequestException(
+          `El nuevo monto dejaría el saldo en negativo`,
+        );
+      }
+      account.remainingBalance = newBalance;
+      if (
+        account.status === AccountStatus.FINISHED &&
+        newBalance > 0
+      ) {
+        account.status = AccountStatus.ACTIVE;
+      }
+      if (newBalance === 0 && account.status === AccountStatus.ACTIVE) {
+        account.status = AccountStatus.FINISHED;
+      }
+
+      payment.amount = newAmount;
+      if (updatePaymentDto.date !== undefined) {
+        payment.date = updatePaymentDto.date;
+      }
+      if (updatePaymentDto.userId !== undefined) {
+        const newUser = await manager.findOne(User, {
+          where: { id: updatePaymentDto.userId },
+        });
+        if (!newUser) {
+          throw new NotFoundException(
+            `Usuario con id ${updatePaymentDto.userId} no encontrado`,
+          );
+        }
+        payment.user = newUser;
+      }
+
+      await manager.save(account);
+      return manager.save(payment);
     });
 
-    if (!payment) {
-      throw new NotFoundException(`Pago con id ${id} no encontrado`);
-    }
-    return this.paymentRepository.save(payment);
+    await this.accountService.invalidateCache();
+    return updated;
   }
 
   async remove(id: string) {
-    const payment = await this.findOne(id);
-    payment.account.remainingBalance += payment.amount;
+    const message = await this.dataSource.transaction(async (manager) => {
+      const payment = await manager.findOne(Payment, {
+        where: { id },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!payment) {
+        throw new NotFoundException(`Pago con id ${id} no encontrado`);
+      }
 
-    await this.accountRepository.save(payment.account);
-    await this.paymentRepository.softDelete(id);
-    return `Pago eliminado con éxito`;
+      const account = await manager.findOne(Account, {
+        where: { id: payment.accountId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!account) {
+        throw new NotFoundException(`Cuenta no encontrada`);
+      }
+
+      account.remainingBalance += payment.amount;
+      if (
+        account.status === AccountStatus.FINISHED &&
+        account.remainingBalance > 0
+      ) {
+        account.status = AccountStatus.ACTIVE;
+      }
+
+      await manager.save(account);
+      await manager.softDelete(Payment, id);
+      return `Pago eliminado con éxito`;
+    });
+
+    await this.accountService.invalidateCache();
+    return message;
   }
 }
