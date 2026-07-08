@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException } from '@nestjs/common';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { getRepositoryToken } from '@nestjs/typeorm';
 
 import { UserService } from 'src/user/user.service';
@@ -13,20 +13,37 @@ describe('UserService', () => {
   let service: UserService;
   let userRepo: jest.Mocked<Repository<User>>;
   let zoneRepo: jest.Mocked<Repository<Zone>>;
+  let dataSource: { transaction: jest.Mock };
 
   beforeEach(async () => {
+    const userRepoMock = {
+      findOne: jest.fn(),
+      create: jest.fn((data) => data),
+      save: jest.fn((data) => Promise.resolve({ id: 'user-1', ...data })),
+      preload: jest.fn((data) => Promise.resolve(data)),
+      softDelete: jest.fn(),
+    };
+    const zoneRepoMock = {
+      findOne: jest.fn(),
+      findBy: jest.fn(),
+    };
+    const dataSourceMock = {
+      // Mimic the real transaction: invoke the callback with a manager that
+      // hands out the same mocked repositories.
+      transaction: jest.fn(async (cb: (manager: any) => unknown) =>
+        cb({
+          getRepository: (entity: any) =>
+            entity === Zone ? zoneRepoMock : userRepoMock,
+        }),
+      ),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         UserService,
         {
           provide: getRepositoryToken(User),
-          useValue: {
-            findOne: jest.fn(),
-            create: jest.fn((data) => data),
-            save: jest.fn((data) => Promise.resolve({ id: 'user-1', ...data })),
-            preload: jest.fn((data) => Promise.resolve(data)),
-            softDelete: jest.fn(),
-          },
+          useValue: userRepoMock,
         },
         {
           provide: getRepositoryToken(Role),
@@ -34,11 +51,15 @@ describe('UserService', () => {
         },
         {
           provide: getRepositoryToken(Zone),
-          useValue: { findOne: jest.fn(), findBy: jest.fn() },
+          useValue: zoneRepoMock,
         },
         {
           provide: getRepositoryToken(Payment),
           useValue: { createQueryBuilder: jest.fn() },
+        },
+        {
+          provide: DataSource,
+          useValue: dataSourceMock,
         },
       ],
     }).compile();
@@ -46,21 +67,17 @@ describe('UserService', () => {
     service = module.get<UserService>(UserService);
     userRepo = module.get(getRepositoryToken(User));
     zoneRepo = module.get(getRepositoryToken(Zone));
+    dataSource = module.get(DataSource);
   });
 
   describe('update()', () => {
-    // Fix #3: with the race condition, forEach(async) doesn't await and
-    // preload runs with an empty userZones array even when a zone is invalid.
-    // The correct behavior is: ALL zones must be validated before any save.
-
-    it('should throw NotFoundException when ANY zone id is invalid (no race)', async () => {
+    it('should throw NotFoundException when ANY zone id is invalid', async () => {
       const validZoneId = 'zone-valid';
       const invalidZoneId = 'zone-bogus';
 
       zoneRepo.findOne.mockImplementation(({ where }: any) => {
         if (where.id === validZoneId)
           return Promise.resolve({ id: validZoneId } as Zone);
-        if (where.id === invalidZoneId) return Promise.resolve(null);
         return Promise.resolve(null);
       });
 
@@ -76,9 +93,9 @@ describe('UserService', () => {
         } as any),
       ).rejects.toThrow(NotFoundException);
 
-      // Belt-and-suspenders: preload must not have run with empty zones.
-      // If the bug is present, preload completes successfully and save
-      // is called with no zones (silently clearing them).
+      // Belt-and-suspenders: if a zone is invalid, the transaction must not
+      // commit any save. Wrapping in dataSource.transaction rolls back on throw.
+      expect(dataSource.transaction).toHaveBeenCalled();
       expect(userRepo.save).not.toHaveBeenCalled();
     });
 
@@ -98,7 +115,6 @@ describe('UserService', () => {
       const callOrder: string[] = [];
       userRepo.preload.mockImplementation(async (data: any) => {
         callOrder.push('preload');
-        // Assert ALL three zones are present when preload runs
         expect(data.zones).toHaveLength(3);
         return data;
       });
@@ -109,7 +125,6 @@ describe('UserService', () => {
 
       await service.update('user-1', { zones: ids } as any);
 
-      // All findOne calls must happen BEFORE preload
       const firstPreloadIdx = callOrder.indexOf('preload');
       const lastFindOneIdx = callOrder
         .map((c, i) => (c.startsWith('findOne:') ? i : -1))
@@ -118,8 +133,7 @@ describe('UserService', () => {
       expect(lastFindOneIdx).toBeLessThan(firstPreloadIdx);
     });
 
-    it('should clear zones when zones array is empty (document current contract)', async () => {
-      zoneRepo.findOne.mockResolvedValue({ id: 'zone-x' } as Zone);
+    it('should clear zones when zones array is empty (explicit clear)', async () => {
       userRepo.findOne.mockResolvedValue({
         id: 'user-1',
         password: 'old-hash',
@@ -136,6 +150,54 @@ describe('UserService', () => {
         expect.objectContaining({ zones: [] }),
       );
       expect(userRepo.save).toHaveBeenCalled();
+    });
+
+    it('should keep current zones when zones field is omitted', async () => {
+      userRepo.findOne.mockResolvedValue({
+        id: 'user-1',
+        password: 'old-hash',
+        role: { id: 'r', name: 'Admin' } as any,
+      } as any);
+      userRepo.preload.mockImplementation(async (data: any) => {
+        // zones key must NOT be in the preload input — letting it through
+        // with undefined would force TypeORM to clear the relation.
+        expect(data).not.toHaveProperty('zones');
+        return data;
+      });
+
+      await service.update('user-1', { name: 'New Name' } as any);
+
+      expect(userRepo.save).toHaveBeenCalled();
+    });
+
+    it('should hash a new password and leave the existing hash alone when empty', async () => {
+      userRepo.findOne.mockResolvedValue({
+        id: 'user-1',
+        password: 'old-hash',
+        role: { id: 'r', name: 'Admin' } as any,
+      } as any);
+      userRepo.preload.mockImplementation(async (data: any) => data);
+
+      // empty password → keep existing
+      await service.update('user-1', { password: '' } as any);
+      const emptyCall = userRepo.preload.mock.calls[0][0] as any;
+      expect(emptyCall.password).toBeUndefined();
+
+      // new password → bcrypt-hashed ($2 prefix for bcryptjs hashes)
+      await service.update('user-1', { password: 'newpassword123' } as any);
+      const filledCall = userRepo.preload.mock.calls[1][0] as any;
+      expect(typeof filledCall.password).toBe('string');
+      expect(filledCall.password).not.toBe('newpassword123');
+      expect(filledCall.password.startsWith('$2')).toBe(true);
+    });
+
+    it('should throw NotFoundException when user does not exist', async () => {
+      userRepo.findOne.mockResolvedValue(null);
+
+      await expect(
+        service.update('missing-uuid', { name: 'X' } as any),
+      ).rejects.toThrow(NotFoundException);
+      expect(userRepo.save).not.toHaveBeenCalled();
     });
   });
 

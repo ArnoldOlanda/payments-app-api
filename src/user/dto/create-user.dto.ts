@@ -5,6 +5,7 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  MinLength,
 } from 'class-validator';
 
 export class CreateUserDto {
@@ -24,6 +25,7 @@ export class CreateUserDto {
 
   @IsOptional()
   @IsString()
+  @MinLength(8)
   password: string;
 
   @IsArray()

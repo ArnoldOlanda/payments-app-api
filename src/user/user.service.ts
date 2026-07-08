@@ -7,7 +7,7 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { InjectRepository } from '@nestjs/typeorm';
 import { User } from './entities/user.entity';
-import { In, Repository } from 'typeorm';
+import { DataSource, In, Repository } from 'typeorm';
 import { Role } from 'src/role/entities/role.entity';
 import { encryptPassword } from 'src/helpers/encryptPassword';
 import { Zone } from 'src/zone/entities/zone.entity';
@@ -25,6 +25,7 @@ export class UserService {
     private readonly zoneRepository: Repository<Zone>,
     @InjectRepository(Payment)
     private readonly paymentRepository: Repository<Payment>,
+    private readonly dataSource: DataSource,
   ) {}
 
   async create(createUserDto: CreateUserDto) {
@@ -115,32 +116,50 @@ export class UserService {
   async update(id: string, updateUserDto: UpdateUserDto) {
     const { zones, ...rest } = updateUserDto;
 
-    // Validate ALL zones concurrently, but await Promise.all so we don't
-    // race the preload() below with potentially-missing zone lookups.
-    const userZones: Zone[] = await Promise.all(
-      zones.map(async (zone) => {
-        const zoneFound = await this.zoneRepository.findOne({
-          where: { id: zone },
-        });
-        if (!zoneFound) {
-          throw new NotFoundException(`Zone with id ${zone} not found`);
-        }
-        return zoneFound;
-      }),
-    );
+    return this.dataSource.transaction(async (manager) => {
+      const userRepo = manager.getRepository(User);
+      const zoneRepo = manager.getRepository(Zone);
 
-    const userDb = await this.userRepository.findOne({ where: { id } });
+      const userDb = await userRepo.findOne({ where: { id } });
+      if (!userDb) {
+        throw new NotFoundException(`User with id ${id} not found`);
+      }
 
-    const user = await this.userRepository.preload({
-      id,
-      ...rest,
-      password: rest.password
-        ? encryptPassword(rest.password)
-        : userDb.password,
-      zones: userZones,
+      // Resolve zones only when the DTO provides them. Partial updates that
+      // omit `zones` keep the existing assignment.
+      const userZones: Zone[] | undefined =
+        zones === undefined
+          ? undefined
+          : await Promise.all(
+              zones.map(async (zoneId) => {
+                const zoneFound = await zoneRepo.findOne({
+                  where: { id: zoneId },
+                });
+                if (!zoneFound) {
+                  throw new NotFoundException(
+                    `Zone with id ${zoneId} not found`,
+                  );
+                }
+                return zoneFound;
+              }),
+            );
+
+      const user = await userRepo.preload({
+        id,
+        ...rest,
+        // Only set password when explicitly provided. Passing undefined lets
+        // TypeORM preserve the existing column value (select:false in the
+        // entity means the existing row value stays put on save).
+        password: rest.password ? encryptPassword(rest.password) : undefined,
+        ...(userZones && { zones: userZones }),
+      });
+
+      if (!user) {
+        throw new NotFoundException(`User with id ${id} not found`);
+      }
+
+      return userRepo.save(user);
     });
-
-    return this.userRepository.save(user);
   }
 
   async remove(id: string) {

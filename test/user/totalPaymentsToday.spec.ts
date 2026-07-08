@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException } from '@nestjs/common';
+import { DataSource } from 'typeorm';
 import { getRepositoryToken } from '@nestjs/typeorm';
 
 import { UserService } from 'src/user/user.service';
@@ -32,6 +33,14 @@ describe('UserService.totalPaymentsToday()', () => {
         {
           provide: getRepositoryToken(Payment),
           useValue: { createQueryBuilder: jest.fn() },
+        },
+        {
+          provide: DataSource,
+          useValue: {
+            // This test does not exercise transaction() — passthrough is fine.
+            transaction: (cb: (manager: any) => unknown) =>
+              cb({ getRepository: jest.fn() }),
+          },
         },
       ],
     }).compile();
