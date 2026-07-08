@@ -7,7 +7,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, Repository } from 'typeorm';
 import { JwtService } from '@nestjs/jwt';
-import { createHash } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import { Response } from 'express';
 
 import { CreateAuthDto } from './dto/create-auth.dto';
@@ -116,7 +116,7 @@ export class AuthService {
     stored.revokedAt = new Date();
     await this.refreshTokenRepo.save(stored);
 
-    const newAccessToken = this.jwtService.sign(payload);
+    const newAccessToken = this.jwtService.sign({ id: payload.id });
     const newRefreshToken = await this.generateRefreshToken(payload);
     await this.persistRefreshToken(payload.id, newRefreshToken);
 
@@ -160,9 +160,12 @@ export class AuthService {
   }
 
   private generateRefreshToken(payload: { id: string }) {
-    return this.jwtService.signAsync(payload, {
-      secret: process.env.REFRESH_TOKEN_SECRET,
-      expiresIn: '7d',
-    });
+    return this.jwtService.signAsync(
+      { id: payload.id, jti: randomUUID() },
+      {
+        secret: process.env.REFRESH_TOKEN_SECRET,
+        expiresIn: '7d',
+      },
+    );
   }
 }

@@ -245,6 +245,20 @@ describe('AuthService', () => {
       expect(persistedCall.userId).toBe('user-uuid-1');
       expect(persistedCall.tokenHash).toBe(sha256('new-refresh-token'));
       expect(persistedCall.revokedAt).toBeNull();
+
+      // access token payload must NOT carry the refresh jti
+      expect(jwtService.sign).toHaveBeenCalledWith({ id: 'user-uuid-1' });
+
+      // refresh token payload MUST carry a unique jti
+      const refreshPayload = jwtService.signAsync.mock.calls[0][0] as {
+        id: string;
+        jti: string;
+      };
+      expect(refreshPayload.id).toBe('user-uuid-1');
+      expect(refreshPayload.jti).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+      );
+
       expect(result).toEqual({
         token: 'new-access-token',
         refresh_token: 'new-refresh-token',
