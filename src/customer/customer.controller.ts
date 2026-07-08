@@ -21,7 +21,7 @@ export class CustomerController {
   constructor(private readonly customerService: CustomerService) {}
 
   @Post()
-  @Auth(ValidRole.ADMIN, ValidRole.PRESTAMISTA)
+  @Auth(ValidRole.ADMIN)
   create(@Body() createCustomerDto: CreateCustomerDto) {
     return this.customerService.create(createCustomerDto);
   }
@@ -33,19 +33,19 @@ export class CustomerController {
   }
 
   @Get(':id')
-  @Auth(ValidRole.ADMIN, ValidRole.PRESTAMISTA)
+  @Auth(ValidRole.ADMIN)
   findOne(@Param('id', ParseUUIDPipe) id: string) {
     return this.customerService.findOne(id);
   }
 
   @Get(':id/credits')
-  @Auth(ValidRole.ADMIN, ValidRole.PRESTAMISTA)
+  @Auth(ValidRole.ADMIN)
   findCredits(@Param('id', ParseUUIDPipe) id: string) {
     return this.customerService.findCredits(id);
   }
 
   @Patch(':id')
-  @Auth(ValidRole.ADMIN, ValidRole.PRESTAMISTA)
+  @Auth(ValidRole.ADMIN)
   update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() updateCustomerDto: UpdateCustomerDto,
@@ -54,7 +54,7 @@ export class CustomerController {
   }
 
   @Delete(':id')
-  @Auth(ValidRole.ADMIN, ValidRole.PRESTAMISTA)
+  @Auth(ValidRole.ADMIN)
   remove(@Param('id', ParseUUIDPipe) id: string) {
     return this.customerService.remove(id);
   }

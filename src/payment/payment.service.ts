@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -9,11 +10,15 @@ import { DataSource, Repository } from 'typeorm';
 import { Account } from 'src/account/entities/account.entity';
 import { AccountStatus } from 'src/account/enums/account-status.enum';
 import { AccountService } from 'src/account/account.service';
-import { User } from 'src/user/entities/user.entity';
 
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { UpdatePaymentDto } from './dto/update-payment.dto';
 import { Payment } from './entities/payment.entity';
+import { ValidRole } from 'src/auth/enums/validRoles.enum';
+import { Actor } from 'src/auth/types/actor.type';
+import { loadUserZoneIds } from 'src/auth/helpers/zone-scope.helper';
+
+const isAdmin = (user: Actor): boolean => user.role === ValidRole.ADMIN;
 
 @Injectable()
 export class PaymentService {
@@ -22,25 +27,15 @@ export class PaymentService {
     private readonly accountRepository: Repository<Account>,
     @InjectRepository(Payment)
     private readonly paymentRepository: Repository<Payment>,
-    @InjectRepository(User)
-    private readonly userRepository: Repository<User>,
     private readonly accountService: AccountService,
     private readonly dataSource: DataSource,
   ) {}
 
-  async create(createPaymentDto: CreatePaymentDto) {
-    const user = await this.userRepository.findOne({
-      where: { id: createPaymentDto.userId },
-    });
-    if (!user) {
-      throw new NotFoundException(
-        `Usuario con id ${createPaymentDto.userId} no encontrado`,
-      );
-    }
-
+  async create(createPaymentDto: CreatePaymentDto, actor: Actor) {
     const savedPayment = await this.dataSource.transaction(async (manager) => {
       const account = await manager.findOne(Account, {
         where: { id: createPaymentDto.accountId },
+        relations: ['customer', 'customer.zone'],
         lock: { mode: 'pessimistic_write' },
       });
 
@@ -48,6 +43,25 @@ export class PaymentService {
         throw new NotFoundException(
           `Cuenta con id ${createPaymentDto.accountId} no encontrada`,
         );
+      }
+
+      if (!isAdmin(actor)) {
+        if (!account.customer) {
+          throw new ForbiddenException(
+            'Account has no customer; cannot validate access',
+          );
+        }
+        if (!account.customer.zone) {
+          throw new ForbiddenException(
+            'Customer has no zone assigned; cannot validate access',
+          );
+        }
+        const userZoneIds = await loadUserZoneIds(manager, actor.id);
+        if (!userZoneIds.includes(account.customer.zone.id)) {
+          throw new ForbiddenException(
+            'Account customer is not within the user assigned zones',
+          );
+        }
       }
 
       if (account.status === AccountStatus.FINISHED) {
@@ -63,9 +77,12 @@ export class PaymentService {
       }
 
       const payment = manager.create(Payment, {
-        ...createPaymentDto,
+        accountId: createPaymentDto.accountId,
         account,
-        user,
+        date: createPaymentDto.date,
+        amount: createPaymentDto.amount,
+        userId: actor.id,
+        user: actor,
       });
 
       const restAmount = account.remainingBalance - createPaymentDto.amount;
@@ -83,25 +100,70 @@ export class PaymentService {
     return savedPayment;
   }
 
-  findAll(accountId: string | undefined) {
-    if (accountId) {
-      return this.paymentRepository.find({
-        where: { account: { id: accountId } },
-        relations: ['user'],
-      });
+  async findAll(accountId: string, actor: Actor) {
+    const account = await this.accountRepository.findOne({
+      where: { id: accountId },
+      relations: ['customer', 'customer.zone'],
+    });
+    if (!account) {
+      throw new NotFoundException(`Cuenta con id ${accountId} no encontrada`);
     }
-    return this.paymentRepository.find();
+
+    if (!isAdmin(actor)) {
+      if (!account.customer || !account.customer.zone) {
+        throw new ForbiddenException('Account customer has no zone assigned');
+      }
+      const userZoneIds = await this.dataSource.transaction((manager) =>
+        loadUserZoneIds(manager, actor.id),
+      );
+      if (!userZoneIds.includes(account.customer.zone.id)) {
+        throw new ForbiddenException(
+          'Account customer is not within the user assigned zones',
+        );
+      }
+    }
+
+    return this.paymentRepository.find({
+      where: { account: { id: accountId } },
+      relations: ['user'],
+    });
   }
 
-  async findOne(id: string) {
+  async findOne(id: string, actor: Actor) {
     const payment = await this.paymentRepository.findOne({
       where: { id },
-      relations: ['account'],
+      relations: ['account', 'account.customer', 'account.customer.zone'],
     });
     if (!payment) {
       throw new NotFoundException(`Pago con id ${id} no encontrado`);
     }
+    await this.assertPaymentAccess(payment, actor);
     return payment;
+  }
+
+  private async assertPaymentAccess(
+    payment: {
+      account?: {
+        customer?: { zone?: { id: string } | null } | null;
+      } | null;
+    },
+    actor: Actor,
+  ): Promise<void> {
+    if (isAdmin(actor)) return;
+    const zone = payment.account?.customer?.zone;
+    if (!zone) {
+      throw new ForbiddenException(
+        'Payment account customer has no zone assigned',
+      );
+    }
+    const userZoneIds = await this.dataSource.transaction((manager) =>
+      loadUserZoneIds(manager, actor.id),
+    );
+    if (!userZoneIds.includes(zone.id)) {
+      throw new ForbiddenException(
+        'Payment is not within the user assigned zones',
+      );
+    }
   }
 
   async update(id: string, updatePaymentDto: UpdatePaymentDto) {
@@ -144,10 +206,7 @@ export class PaymentService {
         );
       }
       account.remainingBalance = newBalance;
-      if (
-        account.status === AccountStatus.FINISHED &&
-        newBalance > 0
-      ) {
+      if (account.status === AccountStatus.FINISHED && newBalance > 0) {
         account.status = AccountStatus.ACTIVE;
       }
       if (newBalance === 0 && account.status === AccountStatus.ACTIVE) {
@@ -157,17 +216,6 @@ export class PaymentService {
       payment.amount = newAmount;
       if (updatePaymentDto.date !== undefined) {
         payment.date = updatePaymentDto.date;
-      }
-      if (updatePaymentDto.userId !== undefined) {
-        const newUser = await manager.findOne(User, {
-          where: { id: updatePaymentDto.userId },
-        });
-        if (!newUser) {
-          throw new NotFoundException(
-            `Usuario con id ${updatePaymentDto.userId} no encontrado`,
-          );
-        }
-        payment.user = newUser;
       }
 
       await manager.save(account);

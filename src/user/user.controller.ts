@@ -14,10 +14,18 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { AssignZonesDto } from './dto/assign-zones.dto';
 import { Auth } from 'src/auth/decorators/auth.decorator';
 import { ValidRole } from 'src/auth/enums/validRoles.enum';
+import { CurrentUser } from 'src/auth/decorators/current-user.decorator';
+import { Actor } from 'src/auth/types/actor.type';
 
 @Controller('user')
 export class UserController {
   constructor(private readonly userService: UserService) {}
+
+  @Get('me')
+  @Auth(ValidRole.ADMIN, ValidRole.PRESTAMISTA)
+  getMe(@CurrentUser() actor: Actor) {
+    return this.userService.getMe(actor);
+  }
 
   @Post()
   @Auth(ValidRole.ADMIN)
@@ -63,13 +71,21 @@ export class UserController {
 
   @Get(':id/total-payments-today')
   @Auth(ValidRole.ADMIN, ValidRole.PRESTAMISTA)
-  totalPaymentsToday(@Param('id', ParseUUIDPipe) id: string) {
-    return this.userService.totalPaymentsToday(id);
+  totalPaymentsToday(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() actor: Actor,
+  ) {
+    const effectiveId = actor.role === ValidRole.ADMIN ? id : actor.id;
+    return this.userService.totalPaymentsToday(effectiveId);
   }
 
   @Get(':id/customers')
   @Auth(ValidRole.ADMIN, ValidRole.PRESTAMISTA)
-  findCustomers(@Param('id', ParseUUIDPipe) id: string) {
-    return this.userService.findCustomers(id);
+  findCustomers(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() actor: Actor,
+  ) {
+    const effectiveId = actor.role === ValidRole.ADMIN ? id : actor.id;
+    return this.userService.findCustomers(effectiveId);
   }
 }

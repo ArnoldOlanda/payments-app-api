@@ -1,4 +1,17 @@
-import { PartialType } from '@nestjs/mapped-types';
-import { CreatePaymentDto } from './create-payment.dto';
+import { Type } from 'class-transformer';
+import { IsDate, IsNumber, IsOptional, IsUUID } from 'class-validator';
 
-export class UpdatePaymentDto extends PartialType(CreatePaymentDto) {}
+export class UpdatePaymentDto {
+  @IsOptional()
+  @IsUUID()
+  accountId?: string;
+
+  @IsOptional()
+  @IsDate()
+  @Type(() => Date)
+  date?: Date;
+
+  @IsOptional()
+  @IsNumber()
+  amount?: number;
+}

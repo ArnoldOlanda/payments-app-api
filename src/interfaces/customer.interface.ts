@@ -6,4 +6,5 @@ export interface CustomerInterface {
   address: string;
   phone: string;
   email: string;
+  zone?: { id: string } | null;
 }

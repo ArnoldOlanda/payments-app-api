@@ -1,20 +1,26 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { DataSource } from 'typeorm';
+import { DataSource, EntityManager } from 'typeorm';
 
 import { PaymentService } from 'src/payment/payment.service';
 import { Payment } from 'src/payment/entities/payment.entity';
 import { Account } from 'src/account/entities/account.entity';
 import { AccountStatus } from 'src/account/enums/account-status.enum';
 import { User } from 'src/user/entities/user.entity';
+import { Customer } from 'src/customer/entities/customer.entity';
 import { AccountService } from 'src/account/account.service';
+import { ValidRole } from 'src/auth/enums/validRoles.enum';
+import { Actor } from 'src/auth/types/actor.type';
 
 describe('PaymentService', () => {
   let service: PaymentService;
   let accountRepo: jest.Mocked<any>;
   let paymentRepo: jest.Mocked<any>;
-  let userRepo: jest.Mocked<any>;
   let accountService: jest.Mocked<AccountService>;
   let dataSource: jest.Mocked<DataSource>;
   let mockManager: {
@@ -32,13 +38,33 @@ describe('PaymentService', () => {
       ...overrides,
     }) as Account;
 
-  const buildUser = (overrides: Partial<User> = {}): User =>
-    ({
-      id: 'user-uuid-1',
-      name: 'Cobrador',
-      email: 'c@example.com',
-      ...overrides,
-    }) as User;
+  const adminActor = { id: 'admin-1', role: ValidRole.ADMIN } as Actor;
+  const prestamistaActor = {
+    id: 'prest-1',
+    role: ValidRole.PRESTAMISTA,
+  } as Actor;
+
+  const stubManager = (userZoneIds: string[]): EntityManager => {
+    const userWithZones = {
+      id: 'prest-1',
+      zones: userZoneIds.map((id) => ({ id })),
+    };
+    return {
+      findOne: jest.fn().mockImplementation((entity: any, options: any) => {
+        if (entity === Account) return accountRepo.findOne(options);
+        if (entity === Payment) return paymentRepo.findOne(options);
+        if (entity === User) return Promise.resolve(userWithZones);
+        if (entity === Customer) {
+          const customerZoneId = options?.where?.zone?.id ?? userZoneIds[0];
+          return Promise.resolve({ id: 'c-1', zone: { id: customerZoneId } });
+        }
+        return Promise.resolve(null);
+      }),
+      create: jest.fn((_entity, data) => ({ ...data })),
+      save: jest.fn(async (data) => data),
+      softDelete: jest.fn(async () => ({ affected: 1 })),
+    } as unknown as EntityManager;
+  };
 
   beforeEach(async () => {
     mockManager = {
@@ -69,12 +95,6 @@ describe('PaymentService', () => {
           },
         },
         {
-          provide: getRepositoryToken(User),
-          useValue: {
-            findOne: jest.fn(),
-          },
-        },
-        {
           provide: AccountService,
           useValue: {
             invalidateCache: jest.fn().mockResolvedValue(undefined),
@@ -92,14 +112,13 @@ describe('PaymentService', () => {
     service = module.get<PaymentService>(PaymentService);
     accountRepo = module.get(getRepositoryToken(Account));
     paymentRepo = module.get(getRepositoryToken(Payment));
-    userRepo = module.get(getRepositoryToken(User));
     accountService = module.get(AccountService);
     dataSource = module.get(DataSource);
 
     mockManager.findOne.mockImplementation((entity: any, options: any) => {
       if (entity === Account) return accountRepo.findOne(options);
       if (entity === Payment) return paymentRepo.findOne(options);
-      if (entity === User) return userRepo.findOne(options);
+      if (entity === User) return Promise.resolve(null);
       return Promise.resolve(null);
     });
   });
@@ -107,53 +126,46 @@ describe('PaymentService', () => {
   describe('create()', () => {
     const dto = {
       accountId: 'account-uuid-1',
-      userId: 'user-uuid-1',
       date: new Date('2025-01-15T10:00:00Z'),
       amount: 200,
     };
 
-    it('should reject when user is not found', async () => {
-      userRepo.findOne.mockResolvedValue(null);
-
-      await expect(service.create(dto)).rejects.toThrow(NotFoundException);
-      expect(dataSource.transaction).not.toHaveBeenCalled();
-      expect(accountService.invalidateCache).not.toHaveBeenCalled();
-    });
-
     it('should reject when account is not found', async () => {
-      userRepo.findOne.mockResolvedValue(buildUser());
       accountRepo.findOne.mockResolvedValue(null);
 
-      await expect(service.create(dto)).rejects.toThrow(NotFoundException);
+      await expect(service.create(dto, adminActor)).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
-    it('should reject with BadRequestException when account is FINISHED (business rule, not 404)', async () => {
-      userRepo.findOne.mockResolvedValue(buildUser());
+    it('should reject with BadRequestException when account is FINISHED', async () => {
       accountRepo.findOne.mockResolvedValue(
         buildAccount({ status: AccountStatus.FINISHED }),
       );
 
-      await expect(service.create(dto)).rejects.toThrow(BadRequestException);
+      await expect(service.create(dto, adminActor)).rejects.toThrow(
+        BadRequestException,
+      );
       expect(mockManager.save).not.toHaveBeenCalled();
     });
 
     it('should reject with BadRequestException when amount exceeds remaining balance', async () => {
-      userRepo.findOne.mockResolvedValue(buildUser());
       accountRepo.findOne.mockResolvedValue(
         buildAccount({ remainingBalance: 100 }),
       );
 
-      await expect(service.create(dto)).rejects.toThrow(BadRequestException);
+      await expect(service.create(dto, adminActor)).rejects.toThrow(
+        BadRequestException,
+      );
       expect(mockManager.save).not.toHaveBeenCalled();
     });
 
     it('should wrap operations in a transaction with pessimistic_write lock on the account', async () => {
-      userRepo.findOne.mockResolvedValue(buildUser());
       accountRepo.findOne.mockResolvedValue(
         buildAccount({ remainingBalance: 1000 }),
       );
 
-      await service.create(dto);
+      await service.create(dto, adminActor);
 
       expect(dataSource.transaction).toHaveBeenCalledTimes(1);
       expect(accountRepo.findOne).toHaveBeenCalledWith(
@@ -164,12 +176,36 @@ describe('PaymentService', () => {
       );
     });
 
+    it('should attribute the payment to the actor (not to a DTO userId)', async () => {
+      accountRepo.findOne.mockResolvedValue(
+        buildAccount({
+          remainingBalance: 1000,
+          customer: { id: 'c-1', zone: { id: 'zone-A' } } as any,
+        }),
+      );
+      mockManager.findOne.mockImplementation((entity: any, options: any) => {
+        if (entity === Account) return accountRepo.findOne(options);
+        if (entity === Payment) return paymentRepo.findOne(options);
+        if (entity === User) {
+          return Promise.resolve({
+            id: prestamistaActor.id,
+            zones: [{ id: 'zone-A' }],
+          });
+        }
+        return Promise.resolve(null);
+      });
+
+      await service.create(dto, prestamistaActor);
+
+      const created = mockManager.create.mock.calls[0][1] as any;
+      expect(created.userId).toBe(prestamistaActor.id);
+    });
+
     it('should deduct amount and keep status ACTIVE when balance remains > 0', async () => {
       const account = buildAccount({ remainingBalance: 1000 });
-      userRepo.findOne.mockResolvedValue(buildUser());
       accountRepo.findOne.mockResolvedValue(account);
 
-      await service.create(dto);
+      await service.create(dto, adminActor);
 
       expect(account.remainingBalance).toBe(800);
       expect(account.status).toBe(AccountStatus.ACTIVE);
@@ -179,21 +215,64 @@ describe('PaymentService', () => {
 
     it('should flip status to FINISHED when balance hits exactly 0', async () => {
       const account = buildAccount({ remainingBalance: 200 });
-      userRepo.findOne.mockResolvedValue(buildUser());
       accountRepo.findOne.mockResolvedValue(account);
 
-      await service.create(dto);
+      await service.create(dto, adminActor);
 
       expect(account.remainingBalance).toBe(0);
       expect(account.status).toBe(AccountStatus.FINISHED);
     });
 
     it('should NOT call invalidateCache if the transaction throws', async () => {
-      userRepo.findOne.mockResolvedValue(buildUser());
       accountRepo.findOne.mockRejectedValue(new Error('db down'));
 
-      await expect(service.create(dto)).rejects.toThrow('db down');
+      await expect(service.create(dto, adminActor)).rejects.toThrow('db down');
       expect(accountService.invalidateCache).not.toHaveBeenCalled();
+    });
+
+    it('should reject Prestamista when account customer zone is not in their zones', async () => {
+      const manager = stubManager(['zone-A']);
+      accountRepo.findOne.mockResolvedValue(
+        buildAccount({
+          customer: { id: 'c-1', zone: { id: 'zone-foreign' } } as any,
+        }),
+      );
+      (dataSource.transaction as jest.Mock).mockImplementationOnce(
+        async (cb: any) => cb(manager),
+      );
+
+      await expect(service.create(dto, prestamistaActor)).rejects.toThrow(
+        ForbiddenException,
+      );
+      expect(manager.save).not.toHaveBeenCalled();
+    });
+
+    it('should allow Prestamista when account customer zone is in their zones', async () => {
+      const manager = stubManager(['zone-A']);
+      accountRepo.findOne.mockResolvedValue(
+        buildAccount({
+          customer: { id: 'c-1', zone: { id: 'zone-A' } } as any,
+        }),
+      );
+      (dataSource.transaction as jest.Mock).mockImplementationOnce(
+        async (cb: any) => cb(manager),
+      );
+
+      await service.create(dto, prestamistaActor);
+
+      expect(manager.save).toHaveBeenCalledTimes(2);
+    });
+
+    it('should allow Admin to skip zone-scope', async () => {
+      accountRepo.findOne.mockResolvedValue(
+        buildAccount({
+          customer: { id: 'c-1', zone: { id: 'zone-foreign' } } as any,
+        }),
+      );
+
+      await service.create(dto, adminActor);
+
+      expect(mockManager.save).toHaveBeenCalledTimes(2);
     });
   });
 
@@ -346,10 +425,13 @@ describe('PaymentService', () => {
   });
 
   describe('findAll() / findOne()', () => {
-    it('findAll filters by accountId when provided', async () => {
+    it('findAll filters by accountId and returns payments for that account (admin)', async () => {
+      accountRepo.findOne.mockResolvedValue(
+        buildAccount({ customer: { zone: { id: 'zone-A' } } as any }),
+      );
       paymentRepo.find.mockResolvedValue([]);
 
-      await service.findAll('account-uuid-1');
+      await service.findAll('account-uuid-1', adminActor);
 
       expect(paymentRepo.find).toHaveBeenCalledWith({
         where: { account: { id: 'account-uuid-1' } },
@@ -357,18 +439,57 @@ describe('PaymentService', () => {
       });
     });
 
-    it('findAll returns all when no accountId', async () => {
+    it('findAll rejects Prestamista when account customer zone is not in their zones', async () => {
+      accountRepo.findOne.mockResolvedValue(
+        buildAccount({
+          customer: { zone: { id: 'zone-foreign' } } as any,
+        }),
+      );
+      (dataSource.transaction as jest.Mock).mockImplementationOnce(
+        async (cb: any) => cb(stubManager(['zone-A'])),
+      );
+
+      await expect(
+        service.findAll('account-uuid-1', prestamistaActor),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('findAll allows Prestamista when account customer zone is in their zones', async () => {
+      accountRepo.findOne.mockResolvedValue(
+        buildAccount({
+          customer: { zone: { id: 'zone-A' } } as any,
+        }),
+      );
+      (dataSource.transaction as jest.Mock).mockImplementationOnce(
+        async (cb: any) => cb(stubManager(['zone-A'])),
+      );
       paymentRepo.find.mockResolvedValue([]);
 
-      await service.findAll(undefined);
+      await service.findAll('account-uuid-1', prestamistaActor);
 
-      expect(paymentRepo.find).toHaveBeenCalledWith();
+      expect(paymentRepo.find).toHaveBeenCalled();
+    });
+
+    it('findOne rejects Prestamista when payment account customer zone is not in their zones', async () => {
+      paymentRepo.findOne.mockResolvedValue({
+        id: 'payment-uuid-1',
+        account: { customer: { zone: { id: 'zone-foreign' } } },
+      } as any);
+      (dataSource.transaction as jest.Mock).mockImplementationOnce(
+        async (cb: any) => cb(stubManager(['zone-A'])),
+      );
+
+      await expect(
+        service.findOne('payment-uuid-1', prestamistaActor),
+      ).rejects.toThrow(ForbiddenException);
     });
 
     it('findOne rejects when payment does not exist', async () => {
       paymentRepo.findOne.mockResolvedValue(null);
 
-      await expect(service.findOne('nope')).rejects.toThrow(NotFoundException);
+      await expect(service.findOne('nope', adminActor)).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 });

@@ -138,4 +138,33 @@ describe('UserService', () => {
       expect(userRepo.save).toHaveBeenCalled();
     });
   });
+
+  describe('getMe()', () => {
+    it('should return the current user with role and zones populated', async () => {
+      const actor = { id: 'user-1' };
+      const expected = {
+        id: 'user-1',
+        name: 'Alice',
+        role: { id: 'r1', name: 'Admin' },
+        zones: [{ id: 'z1' }, { id: 'z2' }],
+      };
+      userRepo.findOne.mockResolvedValue(expected as any);
+
+      const result = await service.getMe(actor);
+
+      expect(userRepo.findOne).toHaveBeenCalledWith({
+        where: { id: 'user-1' },
+        relations: ['role', 'zones'],
+      });
+      expect(result).toBe(expected);
+    });
+
+    it('should throw NotFoundException when the user no longer exists', async () => {
+      userRepo.findOne.mockResolvedValue(null);
+
+      await expect(service.getMe({ id: 'gone' })).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
 });

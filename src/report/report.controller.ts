@@ -9,7 +9,7 @@ export class ReportController {
   constructor(private readonly reportService: ReportService) {}
 
   @Get('/ficha-pagos')
-  @Auth(ValidRole.ADMIN, ValidRole.PRESTAMISTA)
+  @Auth(ValidRole.ADMIN)
   async getFichaPagos(
     @Req() request: Request,
     @Res() response: Response,

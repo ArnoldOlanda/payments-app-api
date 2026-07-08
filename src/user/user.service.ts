@@ -93,6 +93,17 @@ export class UserService {
     return this.userRepository.findOne({ where: { id } });
   }
 
+  async getMe(actor: { id: string }) {
+    const user = await this.userRepository.findOne({
+      where: { id: actor.id },
+      relations: ['role', 'zones'],
+    });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    return user;
+  }
+
   async findBy(field: keyof User, value: string) {
     return this.userRepository.findOne({
       where: { [field]: value },

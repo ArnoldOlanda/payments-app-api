@@ -14,6 +14,8 @@ import { CreatePaymentDto } from './dto/create-payment.dto';
 import { UpdatePaymentDto } from './dto/update-payment.dto';
 import { Auth } from 'src/auth/decorators/auth.decorator';
 import { ValidRole } from 'src/auth/enums/validRoles.enum';
+import { CurrentUser } from 'src/auth/decorators/current-user.decorator';
+import { Actor } from 'src/auth/types/actor.type';
 
 @Controller('payment')
 export class PaymentController {
@@ -21,20 +23,26 @@ export class PaymentController {
 
   @Post()
   @Auth(ValidRole.ADMIN, ValidRole.PRESTAMISTA)
-  create(@Body() createPaymentDto: CreatePaymentDto) {
-    return this.paymentService.create(createPaymentDto);
+  create(
+    @Body() createPaymentDto: CreatePaymentDto,
+    @CurrentUser() actor: Actor,
+  ) {
+    return this.paymentService.create(createPaymentDto, actor);
   }
 
   @Get()
   @Auth(ValidRole.ADMIN, ValidRole.PRESTAMISTA)
-  findAll(@Query('accountId', ParseUUIDPipe) accountId: string) {
-    return this.paymentService.findAll(accountId);
+  findAll(
+    @Query('accountId', ParseUUIDPipe) accountId: string,
+    @CurrentUser() actor: Actor,
+  ) {
+    return this.paymentService.findAll(accountId, actor);
   }
 
   @Get(':id')
   @Auth(ValidRole.ADMIN, ValidRole.PRESTAMISTA)
-  findOne(@Param('id', ParseUUIDPipe) id: string) {
-    return this.paymentService.findOne(id);
+  findOne(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: Actor) {
+    return this.paymentService.findOne(id, actor);
   }
 
   @Patch(':id')
