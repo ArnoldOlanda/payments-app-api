@@ -17,6 +17,7 @@ import { FilesModule } from './files/files.module';
 import { ReportModule } from './report/report.module';
 import { PrinterModule } from './printer/printer.module';
 import { MailModule } from './mail/mail.module';
+import { AnalyticsModule } from './analytics/analytics.module';
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -49,6 +50,7 @@ import { MailModule } from './mail/mail.module';
     ReportModule,
     PrinterModule,
     MailModule,
+    AnalyticsModule,
   ],
   controllers: [],
   providers: [],
