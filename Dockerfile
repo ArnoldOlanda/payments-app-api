@@ -52,7 +52,8 @@ RUN yarn install --production --frozen-lockfile --ignore-scripts
 FROM node:20-alpine AS production
 
 # dumb-init maneja señales correctamente (SIGTERM, SIGINT)
-RUN apk add --no-cache dumb-init
+# wget lo usa el healthcheck del compose
+RUN apk add --no-cache dumb-init wget
 
 # Crear usuario no-root
 RUN addgroup -g 1001 -S nodejs && \
