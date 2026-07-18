@@ -5,13 +5,15 @@ import {
   IsString,
   IsUUID,
   Length,
+  ValidateIf,
 } from 'class-validator';
 
 export class CreateCustomerDto {
-  @IsNotEmpty()
+  @IsOptional()
   @IsString()
-  @Length(8, 8)
-  documentNumber: string;
+  @ValidateIf((o) => o.documentNumber && o.documentNumber.length > 0)
+  @Length(8, 10)
+  documentNumber?: string;
 
   @IsNotEmpty()
   @IsString()
@@ -27,6 +29,7 @@ export class CreateCustomerDto {
 
   @IsOptional()
   @IsString()
+  @ValidateIf((o) => o.phone && o.phone.length > 0)
   @Length(9, 15, { message: 'El número de teléfono debe tener 9 caracteres' })
   phone?: string;
 

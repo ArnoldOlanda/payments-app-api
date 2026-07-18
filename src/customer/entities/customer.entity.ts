@@ -14,7 +14,7 @@ import { Account } from '../../account/entities/account.entity';
 
 @Entity('customer')
 export class Customer extends BaseEntity implements CustomerInterface {
-  @Column({ type: 'varchar', length: 10, unique: true })
+  @Column({ type: 'varchar', length: 10, nullable: true, unique: true })
   documentNumber: string;
 
   @Column({ type: 'varchar', length: 100 })
