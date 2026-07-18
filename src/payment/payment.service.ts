@@ -35,7 +35,6 @@ export class PaymentService {
     const savedPayment = await this.dataSource.transaction(async (manager) => {
       const account = await manager.findOne(Account, {
         where: { id: createPaymentDto.accountId },
-        relations: ['customer', 'customer.zone'],
         lock: { mode: 'pessimistic_write' },
       });
 
@@ -43,6 +42,30 @@ export class PaymentService {
         throw new NotFoundException(
           `Cuenta con id ${createPaymentDto.accountId} no encontrada`,
         );
+      }
+
+      const accountWithRelations = await manager.findOne(Account, {
+        where: { id: createPaymentDto.accountId },
+        relations: ['customer', 'customer.zone'],
+      });
+
+      if (!isAdmin(actor)) {
+        if (!accountWithRelations?.customer) {
+          throw new ForbiddenException(
+            'Account has no customer; cannot validate access',
+          );
+        }
+        if (!accountWithRelations.customer.zone) {
+          throw new ForbiddenException(
+            'Customer has no zone assigned; cannot validate access',
+          );
+        }
+        const userZoneIds = await loadUserZoneIds(manager, actor.id);
+        if (!userZoneIds.includes(accountWithRelations.customer.zone.id)) {
+          throw new ForbiddenException(
+            'Account customer is not within the user assigned zones',
+          );
+        }
       }
 
       if (!isAdmin(actor)) {
