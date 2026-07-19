@@ -24,6 +24,7 @@ export class AuthController {
     private readonly passwordResetService: PasswordResetService,
   ) {}
 
+  @Throttle({ default: { limit: 5, ttl: 15 * 60 * 1000 } })
   @Post('login')
   async login(
     @Body() createAuthDto: CreateAuthDto,
@@ -32,6 +33,7 @@ export class AuthController {
     await this.authService.validate(createAuthDto, res);
   }
 
+  @Throttle({ default: { limit: 30, ttl: 15 * 60 * 1000 } })
   @Post('refresh-token')
   async refreshToken(
     @Req() req: Request,
@@ -63,6 +65,7 @@ export class AuthController {
     return { message: 'If the email exists, a reset link has been sent' };
   }
 
+  @Throttle({ default: { limit: 5, ttl: 15 * 60 * 1000 } })
   @Post('reset-password')
   @HttpCode(200)
   async resetPassword(
