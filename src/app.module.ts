@@ -18,6 +18,7 @@ import { ReportModule } from './report/report.module';
 import { PrinterModule } from './printer/printer.module';
 import { MailModule } from './mail/mail.module';
 import { AnalyticsModule } from './analytics/analytics.module';
+import { HealthModule } from './health/health.module';
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -51,6 +52,7 @@ import { AnalyticsModule } from './analytics/analytics.module';
     PrinterModule,
     MailModule,
     AnalyticsModule,
+    HealthModule,
   ],
   controllers: [],
   providers: [],
