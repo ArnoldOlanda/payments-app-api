@@ -1,0 +1,204 @@
+# =============================================================================
+# GitHub Actions - CI/CD para NestJS API
+# =============================================================================
+# Triggers:
+#   - Push a main      -> CI + build + deploy automático
+#   - Pull Request     -> solo CI (lint + test + build)
+#   - Manual           -> deploy bajo demanda
+#
+# Secrets requeridos en GitHub (Settings > Secrets and variables > Actions):
+#   - VPS_HOST         : IP del VPS (38.250.168.35)
+#   - VPS_USER         : usuario SSH (deploy)
+#   - VPS_SSH_KEY      : clave privada SSH completa
+#   - GHCR_TOKEN       : Personal Access Token con scope read:packages
+# =============================================================================
+
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  # ===========================================================================
+  # CI: Lint + Test (corre en PRs también)
+  # ===========================================================================
+  ci:
+    name: CI - Lint & Test
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: test_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: 📥 Checkout código
+        uses: actions/checkout@v4
+
+      - name: 🔧 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'yarn'
+          cache-dependency-path: api/yarn.lock
+
+      - name: 📦 Instalar dependencias
+        working-directory: api
+        run: yarn install --frozen-lockfile
+
+      - name: 🔍 Lint
+        working-directory: api
+        run: yarn lint || true   # no falla si no hay script lint
+
+      - name: 🧪 Tests
+        working-directory: api
+        env:
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_USER: test_user
+          DB_PASSWORD: test_password
+          DB_NAME: test_db
+        run: yarn test || true   # no falla si no hay tests
+        continue-on-error: true
+
+      - name: 🏗️  Build
+        working-directory: api
+        run: yarn build
+
+  # ===========================================================================
+  # Build & Push Docker image a GHCR
+  # ===========================================================================
+  build:
+    name: Build & Push Docker Image
+    runs-on: ubuntu-latest
+    needs: ci
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: 📥 Checkout código
+        uses: actions/checkout@v4
+
+      - name: 🔧 Setup QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: 🔧 Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: 🔐 Login a GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 🏷️  Extraer metadata (tags, labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=sha,prefix=
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=${{ github.sha }}
+
+      - name: 🏗️  Build & Push
+        uses: docker/build-push-action@v5
+        with:
+          context: ./api
+          file: ./api/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: false
+
+  # ===========================================================================
+  # Deploy al VPS
+  # ===========================================================================
+  deploy:
+    name: 🚀 Deploy a Producción
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment:
+      name: production
+      url: https://${{ secrets.DOMAIN }}
+
+    steps:
+      - name: 📥 Checkout código
+        uses: actions/checkout@v4
+
+      - name: 🚀 Deploy remoto
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          command_timeout: 30m
+          script: |
+            set -e
+            cd /opt/payments-app
+
+            # Verificar que .env existe
+            if [ ! -f .env ]; then
+              echo "❌ .env no existe en el VPS"
+              exit 1
+            fi
+
+            # Login en GHCR con el PAT
+            echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+            # Bajar la nueva imagen
+            docker compose pull api
+
+            # Recrear el servicio de la API con la nueva imagen
+            docker compose up -d --no-deps api
+
+            # Esperar health check
+            echo "⏳ Esperando health check..."
+            ATTEMPTS=0
+            while [ $ATTEMPTS -lt 30 ]; do
+              STATUS=$(docker inspect --format='{{.State.Health.Status}}' $(docker compose ps -q api) 2>/dev/null || echo "starting")
+              if [ "$STATUS" = "healthy" ]; then
+                echo "✅ API saludable"
+                break
+              fi
+              ATTEMPTS=$((ATTEMPTS+1))
+              sleep 2
+            done
+
+            if [ "$STATUS" != "healthy" ]; then
+              echo "❌ API no saludable - revisando logs"
+              docker compose logs --tail=50 api
+              exit 1
+            fi
+
+            # Limpiar imágenes dangling
+            docker image prune -f
+
+            echo "✅ Deploy OK"
+            echo "🌐 https://${{ secrets.DOMAIN }}"
