@@ -1,16 +1,9 @@
 # =============================================================================
 # GitHub Actions - CI/CD para NestJS API
 # =============================================================================
-# Triggers:
-#   - Push a main      -> CI + build + deploy automático
-#   - Pull Request     -> solo CI (lint + test + build)
-#   - Manual           -> deploy bajo demanda
-#
-# Secrets requeridos en GitHub (Settings > Secrets and variables > Actions):
-#   - VPS_HOST         : IP del VPS (38.250.168.35)
-#   - VPS_USER         : usuario SSH (deploy)
-#   - VPS_SSH_KEY      : clave privada SSH completa
-#   - GHCR_TOKEN       : Personal Access Token con scope read:packages
+# Estructura del repo: el código NestJS está en la RAÍZ
+# Secrets requeridos en GitHub:
+#   - VPS_HOST, VPS_USER, VPS_SSH_KEY, GHCR_TOKEN, DOMAIN
 # =============================================================================
 
 name: CI/CD Pipeline
@@ -28,7 +21,7 @@ env:
 
 jobs:
   # ===========================================================================
-  # CI: Lint + Test (corre en PRs también)
+  # CI: Lint + Test
   # ===========================================================================
   ci:
     name: CI - Lint & Test
@@ -58,33 +51,29 @@ jobs:
         with:
           node-version: '20'
           cache: 'yarn'
-          cache-dependency-path: api/yarn.lock
+          cache-dependency-path: yarn.lock
 
       - name: 📦 Instalar dependencias
-        working-directory: api
         run: yarn install --frozen-lockfile
 
       - name: 🔍 Lint
-        working-directory: api
-        run: yarn lint || true   # no falla si no hay script lint
+        run: yarn lint || true
 
       - name: 🧪 Tests
-        working-directory: api
         env:
           DB_HOST: localhost
           DB_PORT: 5432
           DB_USER: test_user
           DB_PASSWORD: test_password
           DB_NAME: test_db
-        run: yarn test || true   # no falla si no hay tests
+        run: yarn test || true
         continue-on-error: true
 
       - name: 🏗️  Build
-        working-directory: api
         run: yarn build
 
   # ===========================================================================
-  # Build & Push Docker image a GHCR
+  # Build & Push Docker image
   # ===========================================================================
   build:
     name: Build & Push Docker Image
@@ -112,7 +101,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: 🏷️  Extraer metadata (tags, labels)
+      - name: 🏷️  Extraer metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
@@ -126,8 +115,8 @@ jobs:
       - name: 🏗️  Build & Push
         uses: docker/build-push-action@v5
         with:
-          context: ./api
-          file: ./api/Dockerfile
+          context: .
+          file: ./Dockerfile
           platforms: linux/amd64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
@@ -169,36 +158,39 @@ jobs:
               exit 1
             fi
 
-            # Login en GHCR con el PAT
+            # Login en GHCR
             echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
             # Bajar la nueva imagen
             docker compose pull api
 
-            # Recrear el servicio de la API con la nueva imagen
+            # Recrear api con la nueva imagen
             docker compose up -d --no-deps api
 
             # Esperar health check
             echo "⏳ Esperando health check..."
             ATTEMPTS=0
+            STATUS="starting"
             while [ $ATTEMPTS -lt 30 ]; do
-              STATUS=$(docker inspect --format='{{.State.Health.Status}}' $(docker compose ps -q api) 2>/dev/null || echo "starting")
-              if [ "$STATUS" = "healthy" ]; then
-                echo "✅ API saludable"
-                break
+              ID=$(docker compose ps -q api 2>/dev/null || true)
+              if [ -n "$ID" ]; then
+                STATUS=$(docker inspect --format='{{.State.Health.Status}}' "$ID" 2>/dev/null || echo "starting")
+                if [ "$STATUS" = "healthy" ]; then
+                  break
+                fi
               fi
               ATTEMPTS=$((ATTEMPTS+1))
               sleep 2
             done
 
             if [ "$STATUS" != "healthy" ]; then
-              echo "❌ API no saludable - revisando logs"
+              echo "❌ API no pasó health check"
               docker compose logs --tail=50 api
               exit 1
             fi
 
-            # Limpiar imágenes dangling
+            # Limpiar
             docker image prune -f
 
             echo "✅ Deploy OK"
-            echo "🌐 https://${{ secrets.DOMAIN }}"
+            echo "🌐 https://payments-api.duckdns.org"
