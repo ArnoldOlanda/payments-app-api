@@ -71,7 +71,7 @@ export class CustomerService {
       return cachedData;
     }
 
-    const { zoneId, search, page = 1, limit = 10 } = paginationDto;
+    const { zoneId, search, page = 1, limit = 10, all = false } = paginationDto;
 
     // Usar QueryBuilder para manejar correctamente las condiciones OR
     const queryBuilder = this.customerRepository
@@ -97,13 +97,19 @@ export class CustomerService {
       );
     }
 
-    // Si no se especifican page y limit, devolver todos los resultados
-    if (!page && !limit) {
-      const results = await queryBuilder.getMany();
-      // Guardar en caché los resultados
-      await this.cacheManager.set(cacheKey, results);
+    // Si all=true, devolver todos los resultados sin paginar pero manteniendo el mismo shape
+    if (all) {
+      const [data, total] = await queryBuilder.getManyAndCount();
+      const result = {
+        data,
+        total,
+        page: 1,
+        limit: total,
+        lastPage: 1,
+      };
+      await this.cacheManager.set(cacheKey, result);
       this.cacheKeys.add(cacheKey);
-      return results;
+      return result;
     }
 
     // Validar que page y limit sean positivos

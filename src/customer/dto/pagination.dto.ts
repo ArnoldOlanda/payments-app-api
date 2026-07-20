@@ -1,4 +1,5 @@
-import { IsNumber, IsOptional, IsUUID, Min, IsString } from 'class-validator';
+import { Type } from 'class-transformer';
+import { IsBoolean, IsNumber, IsOptional, IsUUID, Min, IsString } from 'class-validator';
 
 export class PaginationDto {
   @IsOptional()
@@ -10,6 +11,11 @@ export class PaginationDto {
   @IsNumber()
   @Min(1)
   limit?: number = 10;
+
+  @IsOptional()
+  @IsBoolean()
+  @Type(() => Boolean)
+  all?: boolean;
 
   @IsOptional()
   @IsUUID('4')
