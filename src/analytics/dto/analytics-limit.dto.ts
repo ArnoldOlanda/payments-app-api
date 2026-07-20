@@ -1,6 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsInt, IsOptional, IsUUID, Min } from 'class-validator';
+import { IsDate, IsInt, IsOptional, IsUUID, Min } from 'class-validator';
 
 export class AnalyticsLimitDto {
   @ApiPropertyOptional({ format: 'uuid' })
@@ -14,4 +14,16 @@ export class AnalyticsLimitDto {
   @Min(1)
   @Type(() => Number)
   limit?: number = 10;
+
+  @ApiPropertyOptional({ example: '2024-01-31' })
+  @IsOptional()
+  @IsDate()
+  @Type(() => Date)
+  from?: Date;
+
+  @ApiPropertyOptional({ example: '2024-01-31' })
+  @IsOptional()
+  @IsDate()
+  @Type(() => Date)
+  to?: Date;
 }

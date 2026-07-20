@@ -66,6 +66,8 @@ export class AnalyticsController {
     return this.analyticsService.getRecentPayments(
       query.zoneId,
       query.limit ?? 10,
+      query.from,
+      query.to,
       actor,
     );
   }

@@ -266,9 +266,15 @@ export class AnalyticsService {
     return accounts;
   }
 
-  async getRecentPayments(zoneId: string | undefined, limit: number, actor: Actor) {
+  async getRecentPayments(
+    zoneId: string | undefined,
+    limit: number,
+    from: Date | undefined,
+    to: Date | undefined,
+    actor: Actor,
+  ) {
     const scope = await this.resolveScope(actor, zoneId);
-    const cacheKey = `analytics:recent-payments:${actor.id}:${zoneId ?? 'ALL'}:${limit}`;
+    const cacheKey = `analytics:recent-payments:${actor.id}:${zoneId ?? 'ALL'}:${limit}:${from?.toISOString() ?? ''}:${to?.toISOString() ?? ''}`;
     const cached = await this.cacheManager.get<unknown[]>(cacheKey);
     if (cached) {
       this.logger.log(`[cache] recent-payments hit ${cacheKey}`);
@@ -283,6 +289,10 @@ export class AnalyticsService {
       .leftJoinAndSelect('payment.user', 'user')
       .orderBy('payment.date', 'DESC')
       .take(limit);
+
+    if (from && to) {
+      qb.where('payment.date BETWEEN :from AND :to', { from, to });
+    }
 
     this.applyZoneScope(qb, 'customer', scope);
 
