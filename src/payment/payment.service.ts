@@ -33,11 +33,13 @@ export class PaymentService {
 
   async create(createPaymentDto: CreatePaymentDto, actor: Actor) {
     const savedPayment = await this.dataSource.transaction(async (manager) => {
-      const account = await manager.findOne(Account, {
-        where: { id: createPaymentDto.accountId },
-        relations: ['customer', 'customer.zone'],
-        lock: { mode: 'pessimistic_write' },
-      });
+      const account = await manager
+        .createQueryBuilder(Account, 'account')
+        .leftJoinAndSelect('account.customer', 'customer')
+        .leftJoinAndSelect('customer.zone', 'zone')
+        .setLock('pessimistic_write', undefined, ['account'])
+        .where('account.id = :id', { id: createPaymentDto.accountId })
+        .getOne();
 
       if (!account) {
         throw new NotFoundException(
