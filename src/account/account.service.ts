@@ -176,11 +176,14 @@ export class AccountService {
 
   async update(id: string, updateAccountDto: UpdateAccountDto, actor: Actor) {
     const account = await this.dataSource.transaction(async (manager) => {
-      const existing = await manager.findOne(Account, {
-        where: { id },
-        relations: ['customer', 'customer.zone', 'payments'],
-        lock: { mode: 'pessimistic_write' },
-      });
+      const existing = await manager
+        .createQueryBuilder(Account, 'account')
+        .leftJoinAndSelect('account.customer', 'customer')
+        .leftJoinAndSelect('customer.zone', 'zone')
+        .leftJoinAndSelect('account.payments', 'payment')
+        .setLock('pessimistic_write', undefined, ['account'])
+        .where('account.id = :id', { id })
+        .getOne();
       if (!existing) {
         throw new NotFoundException(`Account with id ${id} not found`);
       }

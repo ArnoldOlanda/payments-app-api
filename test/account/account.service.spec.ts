@@ -393,6 +393,7 @@ describe('AccountService', () => {
 
   describe('update()', () => {
     let mockManager: any;
+    let accountQb: any;
 
     const buildAccount = (overrides: Record<string, unknown> = {}) =>
       ({
@@ -410,8 +411,15 @@ describe('AccountService', () => {
       }) as any;
 
     beforeEach(() => {
+      accountQb = {
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        setLock: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        getOne: jest.fn(() => mockManager.findOne()),
+      };
       mockManager = {
         findOne: jest.fn(),
+        createQueryBuilder: jest.fn(() => accountQb),
         save: jest.fn(async (data: unknown) => data),
       };
       (dataSource.transaction as jest.Mock).mockImplementation(
@@ -607,12 +615,17 @@ describe('AccountService', () => {
       await service.update('account-uuid-1', { amount: 1500 }, adminActor);
 
       expect(dataSource.transaction).toHaveBeenCalledTimes(1);
-      expect(mockManager.findOne).toHaveBeenCalledWith(
+      expect(mockManager.createQueryBuilder).toHaveBeenCalledWith(
         Account,
-        expect.objectContaining({
-          where: { id: 'account-uuid-1' },
-          lock: { mode: 'pessimistic_write' },
-        }),
+        'account',
+      );
+      expect(accountQb.where).toHaveBeenCalledWith('account.id = :id', {
+        id: 'account-uuid-1',
+      });
+      expect(accountQb.setLock).toHaveBeenCalledWith(
+        'pessimistic_write',
+        undefined,
+        ['account'],
       );
     });
   });
