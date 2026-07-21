@@ -14,7 +14,7 @@ import { BaseEntity } from '../../entities/base.entity';
 
 @Entity('payment')
 export class Payment extends BaseEntity implements PaymentInterface {
-  @Column({ type: 'timestamp without time zone', nullable: true })
+  @Column({ type: 'timestamp with time zone', nullable: true })
   date: Date;
 
   @Column({ type: 'float' })

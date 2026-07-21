@@ -74,7 +74,7 @@ COPY --from=builder    --chown=nestjs:nodejs /app/fonts         ./fonts
 # Variables de entorno por defecto
 ENV NODE_ENV=production \
     PORT=3000 \
-    TZ=UTC
+    TZ=America/Lima
 
 # Cambiar a usuario no-root
 USER nestjs
