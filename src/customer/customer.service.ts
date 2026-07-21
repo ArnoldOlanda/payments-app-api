@@ -158,23 +158,25 @@ export class CustomerService {
   }
 
   async update(id: string, updateCustomerDto: UpdateCustomerDto) {
-    if (
-      updateCustomerDto.zoneId !== undefined &&
-      updateCustomerDto.zoneId !== null
-    ) {
-      const zone = await this.zoneRepository.findOne({
-        where: { id: updateCustomerDto.zoneId },
-      });
-
-      if (!zone) throw new NotFoundException('Zone not found');
-    }
-
     const customer = await this.customerRepository.preload({
       id,
       ...updateCustomerDto,
     });
 
     if (!customer) throw new NotFoundException('Customer not found');
+
+    if (updateCustomerDto.zoneId !== undefined) {
+      if (updateCustomerDto.zoneId === null) {
+        customer.zone = null;
+      } else {
+        const zone = await this.zoneRepository.findOne({
+          where: { id: updateCustomerDto.zoneId },
+        });
+
+        if (!zone) throw new NotFoundException('Zone not found');
+        customer.zone = zone;
+      }
+    }
 
     await this.invalidateCache();
     return await this.customerRepository.save(customer);

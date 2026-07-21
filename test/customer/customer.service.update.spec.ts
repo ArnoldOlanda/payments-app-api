@@ -85,6 +85,7 @@ describe('CustomerService.update()', () => {
   });
 
   it('should throw NotFoundException when zoneId points to a non-existent zone', async () => {
+    customerRepo.preload.mockResolvedValue({ id: 'c-1' } as any);
     zoneRepo.findOne.mockResolvedValue(null);
 
     await expect(
@@ -101,5 +102,42 @@ describe('CustomerService.update()', () => {
 
     expect(zoneRepo.findOne).not.toHaveBeenCalled();
     expect(customerRepo.save).toHaveBeenCalled();
+  });
+
+  it('should attach the resolved Zone to the entity before saving (regression: zoneId was silently dropped by preload)', async () => {
+    const zone = { id: 'zone-1', name: 'Zone One' };
+    const preloaded = { id: 'c-1' } as any;
+    customerRepo.preload.mockResolvedValue(preloaded);
+    zoneRepo.findOne.mockResolvedValue(zone);
+
+    await service.update('c-1', { zoneId: 'zone-1' } as any);
+
+    expect(customerRepo.save).toHaveBeenCalledTimes(1);
+    const savedEntity = customerRepo.save.mock.calls[0][0];
+    expect(savedEntity.zone).toBe(zone);
+    expect(savedEntity.zoneId).toBeUndefined();
+  });
+
+  it('should set customer.zone to null when zoneId is explicitly null', async () => {
+    const preloaded = { id: 'c-1', zone: { id: 'zone-old' } } as any;
+    customerRepo.preload.mockResolvedValue(preloaded);
+
+    await service.update('c-1', { zoneId: null } as any);
+
+    expect(customerRepo.save).toHaveBeenCalledTimes(1);
+    const savedEntity = customerRepo.save.mock.calls[0][0];
+    expect(savedEntity.zone).toBeNull();
+  });
+
+  it('should throw NotFoundException when customer does not exist (even with valid zoneId)', async () => {
+    customerRepo.preload.mockResolvedValue(null);
+    zoneRepo.findOne.mockResolvedValue({ id: 'zone-1' } as any);
+
+    await expect(
+      service.update('c-missing', { zoneId: 'zone-1' } as any),
+    ).rejects.toThrow(NotFoundException);
+
+    expect(zoneRepo.findOne).not.toHaveBeenCalled();
+    expect(customerRepo.save).not.toHaveBeenCalled();
   });
 });
