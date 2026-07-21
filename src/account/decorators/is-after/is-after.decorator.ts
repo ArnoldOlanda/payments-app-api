@@ -19,7 +19,9 @@ export function IsAfter(
         validate(value: any, args: ValidationArguments) {
           const [relatedPropertyName] = args.constraints;
           const relatedValue = (args.object as any)[relatedPropertyName];
-          return value > relatedValue; // Verifica que `value` sea mayor que `relatedValue`
+          return relatedValue === undefined || relatedValue === null
+            ? true
+            : value > relatedValue; // Verifica que `value` sea mayor que `relatedValue`
         },
         defaultMessage(args: ValidationArguments) {
           const [relatedPropertyName] = args.constraints;
