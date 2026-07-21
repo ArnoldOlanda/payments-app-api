@@ -28,6 +28,7 @@ describe('PaymentService', () => {
     create: jest.Mock;
     save: jest.Mock;
     softDelete: jest.Mock;
+    createQueryBuilder: jest.Mock;
   };
 
   const buildAccount = (overrides: Partial<Account> = {}): Account =>
@@ -63,6 +64,22 @@ describe('PaymentService', () => {
       create: jest.fn((_entity, data) => ({ ...data })),
       save: jest.fn(async (data) => data),
       softDelete: jest.fn(async () => ({ affected: 1 })),
+      createQueryBuilder: jest.fn().mockImplementation(() => {
+        const qb: any = {
+          leftJoinAndSelect: jest.fn().mockReturnThis(),
+          where: jest.fn().mockReturnThis(),
+          andWhere: jest.fn().mockReturnThis(),
+          setLock: jest.fn().mockReturnThis(),
+          getOne: jest.fn(),
+        };
+        qb.getOne.mockImplementation(() => {
+          const whereArgs = qb.where.mock.calls[0];
+          const id = whereArgs?.[1]?.id;
+          if (typeof id !== 'string') return Promise.resolve(null);
+          return accountRepo.findOne({ where: { id }, lock: { mode: 'pessimistic_write' } });
+        });
+        return qb;
+      }),
     } as unknown as EntityManager;
   };
 
@@ -72,6 +89,7 @@ describe('PaymentService', () => {
       create: jest.fn((_entity, data) => ({ ...data })),
       save: jest.fn(async (data) => data),
       softDelete: jest.fn(async () => ({ affected: 1 })),
+      createQueryBuilder: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -121,6 +139,23 @@ describe('PaymentService', () => {
       if (entity === User) return Promise.resolve(null);
       return Promise.resolve(null);
     });
+
+      mockManager.createQueryBuilder.mockImplementation(() => {
+        const qb: any = {
+          leftJoinAndSelect: jest.fn().mockReturnThis(),
+          where: jest.fn().mockReturnThis(),
+          andWhere: jest.fn().mockReturnThis(),
+          setLock: jest.fn().mockReturnThis(),
+          getOne: jest.fn(),
+        };
+        qb.getOne.mockImplementation(() => {
+          const whereArgs = qb.where.mock.calls[0];
+          const id = whereArgs?.[1]?.id;
+          if (typeof id !== 'string') return Promise.resolve(null);
+          return accountRepo.findOne({ where: { id }, lock: { mode: 'pessimistic_write' } });
+        });
+        return qb;
+      });
   });
 
   describe('create()', () => {

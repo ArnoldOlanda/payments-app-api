@@ -1,6 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { DataSource, EntityManager } from 'typeorm';
 
@@ -384,6 +388,232 @@ describe('AccountService', () => {
 
       await service.handleCron();
       expect(cacheDelSpy).toHaveBeenCalledTimes(0);
+    });
+  });
+
+  describe('update()', () => {
+    let mockManager: any;
+
+    const buildAccount = (overrides: Record<string, unknown> = {}) =>
+      ({
+        id: 'account-uuid-1',
+        date: new Date('2025-01-01T00:00:00Z'),
+        dueDate: new Date('2025-02-01T00:00:00Z'),
+        amount: 1000,
+        remainingBalance: 400,
+        interest: 5,
+        creditType: 'Diario',
+        status: AccountStatus.ACTIVE,
+        payments: [{ id: 'p-1', amount: 600, deletedAt: null }],
+        customer: { id: 'c-1', zone: { id: 'zone-A' } },
+        ...overrides,
+      }) as any;
+
+    beforeEach(() => {
+      mockManager = {
+        findOne: jest.fn(),
+        save: jest.fn(async (data: unknown) => data),
+      };
+      (dataSource.transaction as jest.Mock).mockImplementation(
+        async (cb: (m: unknown) => Promise<unknown>) => cb(mockManager),
+      );
+    });
+
+    it('should recompute remainingBalance when amount increases above payments sum', async () => {
+      const account = buildAccount();
+      mockManager.findOne.mockResolvedValue(account);
+
+      await service.update('account-uuid-1', { amount: 1500 }, adminActor);
+
+      expect(account.amount).toBe(1500);
+      expect(account.remainingBalance).toBe(900);
+      expect(mockManager.save).toHaveBeenCalledWith(account);
+    });
+
+    it('should recompute remainingBalance when amount decreases but stays above payments sum', async () => {
+      const account = buildAccount();
+      mockManager.findOne.mockResolvedValue(account);
+
+      await service.update('account-uuid-1', { amount: 800 }, adminActor);
+
+      expect(account.amount).toBe(800);
+      expect(account.remainingBalance).toBe(200);
+    });
+
+    it('should flip status to FINISHED when amount equals payments sum', async () => {
+      const account = buildAccount();
+      mockManager.findOne.mockResolvedValue(account);
+
+      await service.update('account-uuid-1', { amount: 600 }, adminActor);
+
+      expect(account.amount).toBe(600);
+      expect(account.remainingBalance).toBe(0);
+      expect(account.status).toBe(AccountStatus.FINISHED);
+    });
+
+    it('should reject with BadRequestException when amount is below payments sum', async () => {
+      const account = buildAccount();
+      mockManager.findOne.mockResolvedValue(account);
+
+      await expect(
+        service.update('account-uuid-1', { amount: 500 }, adminActor),
+      ).rejects.toThrow(BadRequestException);
+      expect(mockManager.save).not.toHaveBeenCalled();
+      expect(account.amount).toBe(1000);
+      expect(account.remainingBalance).toBe(400);
+    });
+
+    it('should reactivate a FINISHED account when principal grows', async () => {
+      const account = buildAccount({
+        amount: 600,
+        remainingBalance: 0,
+        status: AccountStatus.FINISHED,
+        payments: [],
+      });
+      mockManager.findOne.mockResolvedValue(account);
+
+      await service.update('account-uuid-1', { amount: 1200 }, adminActor);
+
+      expect(account.amount).toBe(1200);
+      expect(account.remainingBalance).toBe(1200);
+      expect(account.status).toBe(AccountStatus.ACTIVE);
+    });
+
+    it('should reject dueDate when it is not after the stored date', async () => {
+      const account = buildAccount({ date: new Date('2025-01-01') });
+      mockManager.findOne.mockResolvedValue(account);
+
+      await expect(
+        service.update(
+          'account-uuid-1',
+          { dueDate: new Date('2024-12-31') },
+          adminActor,
+        ),
+      ).rejects.toThrow(BadRequestException);
+      expect(mockManager.save).not.toHaveBeenCalled();
+    });
+
+    it('should apply dueDate when it is after the stored date', async () => {
+      const account = buildAccount({ date: new Date('2025-01-01') });
+      mockManager.findOne.mockResolvedValue(account);
+      const newDueDate = new Date('2025-03-01');
+
+      await service.update(
+        'account-uuid-1',
+        { dueDate: newDueDate },
+        adminActor,
+      );
+
+      expect(account.dueDate).toEqual(newDueDate);
+    });
+
+    it('should ignore fields outside amount and dueDate', async () => {
+      const account = buildAccount();
+      mockManager.findOne.mockResolvedValue(account);
+      const originalDate = account.date;
+      const originalInterest = account.interest;
+      const originalCreditType = account.creditType;
+
+      await service.update(
+        'account-uuid-1',
+        {
+          amount: 1500,
+          dueDate: new Date('2025-04-01'),
+          date: new Date('1999-01-01'),
+          creditType: 'Semanal' as any,
+          customerId: 'c-other',
+          interest: 999,
+        } as any,
+        adminActor,
+      );
+
+      expect(account.date).toBe(originalDate);
+      expect(account.interest).toBe(originalInterest);
+      expect(account.creditType).toBe(originalCreditType);
+    });
+
+    it('should leave amount and remainingBalance unchanged when only dueDate is sent', async () => {
+      const account = buildAccount();
+      mockManager.findOne.mockResolvedValue(account);
+
+      await service.update(
+        'account-uuid-1',
+        { dueDate: new Date('2025-04-01') },
+        adminActor,
+      );
+
+      expect(account.amount).toBe(1000);
+      expect(account.remainingBalance).toBe(400);
+    });
+
+    it('should reject with NotFoundException when the account does not exist', async () => {
+      mockManager.findOne.mockResolvedValue(null);
+
+      await expect(
+        service.update('missing', { amount: 1500 }, adminActor),
+      ).rejects.toThrow(NotFoundException);
+      expect(mockManager.save).not.toHaveBeenCalled();
+    });
+
+    it('should reject Prestamista when account customer zone is outside their zones', async () => {
+      const account = buildAccount({
+        customer: { id: 'c-1', zone: { id: 'zone-foreign' } } as any,
+      });
+      mockManager.findOne.mockResolvedValue(account);
+
+      await expect(
+        service.update('account-uuid-1', { amount: 1500 }, prestamistaActor),
+      ).rejects.toThrow(ForbiddenException);
+      expect(mockManager.save).not.toHaveBeenCalled();
+    });
+
+    it('should invalidate cache after a successful update', async () => {
+      const account = buildAccount();
+      mockManager.findOne.mockResolvedValue(account);
+
+      const qb: any = {
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        skip: jest.fn().mockReturnThis(),
+        take: jest.fn().mockReturnThis(),
+        getManyAndCount: jest.fn().mockResolvedValue([[{ id: 'a-1' }], 1]),
+      };
+      accountRepo.createQueryBuilder.mockReturnValue(qb);
+      await service.findAll({ page: 1, limit: 10 } as any, adminActor);
+      const cachedKey = Array.from(cacheStore.keys())[0];
+      expect(cachedKey).toBeDefined();
+
+      await service.update('account-uuid-1', { amount: 1500 }, adminActor);
+
+      expect(cacheDelSpy).toHaveBeenCalledWith(cachedKey);
+      expect(cacheStore.has(cachedKey)).toBe(false);
+    });
+
+    it('should NOT invalidate cache when the transaction throws', async () => {
+      mockManager.findOne.mockRejectedValue(new Error('db down'));
+
+      await expect(
+        service.update('account-uuid-1', { amount: 1500 }, adminActor),
+      ).rejects.toThrow('db down');
+      expect(cacheDelSpy).not.toHaveBeenCalled();
+    });
+
+    it('should wrap update in a transaction with pessimistic_write lock on the account row', async () => {
+      const account = buildAccount();
+      mockManager.findOne.mockResolvedValue(account);
+
+      await service.update('account-uuid-1', { amount: 1500 }, adminActor);
+
+      expect(dataSource.transaction).toHaveBeenCalledTimes(1);
+      expect(mockManager.findOne).toHaveBeenCalledWith(
+        Account,
+        expect.objectContaining({
+          where: { id: 'account-uuid-1' },
+          lock: { mode: 'pessimistic_write' },
+        }),
+      );
     });
   });
 });

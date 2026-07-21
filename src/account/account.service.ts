@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ForbiddenException,
   Inject,
   Injectable,
@@ -174,41 +175,74 @@ export class AccountService {
   }
 
   async update(id: string, updateAccountDto: UpdateAccountDto, actor: Actor) {
-    const existing = await this.accountRepository.findOne({
-      where: { id },
-      relations: ['customer', 'customer.zone'],
-    });
-    if (!existing) {
-      throw new NotFoundException(`Account with id ${id} not found`);
-    }
-    if (!isAdmin(actor)) {
-      if (!existing.customer?.zone) {
-        throw new ForbiddenException(
-          'Account customer has no zone assigned; cannot validate access',
-        );
+    const account = await this.dataSource.transaction(async (manager) => {
+      const existing = await manager.findOne(Account, {
+        where: { id },
+        relations: ['customer', 'customer.zone', 'payments'],
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!existing) {
+        throw new NotFoundException(`Account with id ${id} not found`);
       }
-      const userZoneIds = await loadUserZoneIds(
-        this.dataSource.manager,
-        actor.id,
+      if (!isAdmin(actor)) {
+        if (!existing.customer?.zone) {
+          throw new ForbiddenException(
+            'Account customer has no zone assigned; cannot validate access',
+          );
+        }
+        const userZoneIds = await loadUserZoneIds(manager, actor.id);
+        if (!userZoneIds.includes(existing.customer.zone.id)) {
+          throw new ForbiddenException(
+            'Account customer is not within the user assigned zones',
+          );
+        }
+      }
+
+      const livePayments = (existing.payments ?? []).filter(
+        (payment) =>
+          payment.deletedAt === null || payment.deletedAt === undefined,
       );
-      if (!userZoneIds.includes(existing.customer.zone.id)) {
-        throw new ForbiddenException(
-          'Account customer is not within the user assigned zones',
-        );
+      const sumOfPayments = livePayments.reduce(
+        (sum, payment) => sum + payment.amount,
+        0,
+      );
+
+      if (updateAccountDto.amount !== undefined) {
+        if (updateAccountDto.amount < sumOfPayments) {
+          throw new BadRequestException(
+            `El monto ${updateAccountDto.amount} es menor que la suma de pagos ya registrados (${sumOfPayments})`,
+          );
+        }
+        existing.amount = updateAccountDto.amount;
+        existing.remainingBalance = updateAccountDto.amount - sumOfPayments;
       }
-    }
 
-    const account = await this.accountRepository.preload({
-      id,
-      ...updateAccountDto,
+      if (updateAccountDto.dueDate !== undefined) {
+        if (existing.date && updateAccountDto.dueDate <= existing.date) {
+          throw new BadRequestException(
+            'La fecha de vencimiento no puede ser anterior o igual a la fecha del credito',
+          );
+        }
+        existing.dueDate = updateAccountDto.dueDate;
+      }
+
+      if (
+        existing.remainingBalance === 0 &&
+        existing.status !== AccountStatus.FINISHED
+      ) {
+        existing.status = AccountStatus.FINISHED;
+      } else if (
+        existing.status === AccountStatus.FINISHED &&
+        existing.remainingBalance > 0
+      ) {
+        existing.status = AccountStatus.ACTIVE;
+      }
+
+      return manager.save(existing);
     });
-
-    if (!account) {
-      throw new NotFoundException(`Account with id ${id} not found`);
-    }
 
     await this.invalidateCache();
-    return this.accountRepository.save(account);
+    return account;
   }
 
   async remove(id: string) {
