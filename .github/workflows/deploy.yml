@@ -164,6 +164,23 @@ jobs:
             # Bajar la nueva imagen
             docker compose pull api
 
+            # Correr migraciones antes de levantar la api
+            docker compose up -d --no-deps migrator
+            MIGRATOR_ID=$(docker compose ps -q migrator 2>/dev/null || true)
+            if [ -n "$MIGRATOR_ID" ]; then
+              echo "⏳ Esperando que el migrator termine..."
+              while [ "$(docker inspect --format='{{.State.Status}}' "$MIGRATOR_ID" 2>/dev/null)" != "exited" ]; do
+                sleep 2
+              done
+              MIGRATOR_EXIT=$(docker inspect --format='{{.State.ExitCode}}' "$MIGRATOR_ID" 2>/dev/null || echo "1")
+              if [ "$MIGRATOR_EXIT" != "0" ]; then
+                echo "❌ Migrator falló con código $MIGRATOR_EXIT"
+                docker compose logs --tail=50 migrator
+                exit 1
+              fi
+              echo "✅ Migraciones aplicadas"
+            fi
+
             # Recrear api con la nueva imagen
             docker compose up -d --no-deps api
 
