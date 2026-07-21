@@ -12,6 +12,8 @@ import { CreateZoneDto } from './dto/create-zone.dto';
 import { UpdateZoneDto } from './dto/update-zone.dto';
 import { Auth } from 'src/auth/decorators/auth.decorator';
 import { ValidRole } from 'src/auth/enums/validRoles.enum';
+import { CurrentUser } from 'src/auth/decorators/current-user.decorator';
+import { Actor } from 'src/auth/types/actor.type';
 
 @Controller('zone')
 export class ZoneController {
@@ -19,8 +21,11 @@ export class ZoneController {
 
   @Post()
   @Auth(ValidRole.ADMIN)
-  create(@Body() createZoneDto: CreateZoneDto) {
-    return this.zoneService.create(createZoneDto);
+  create(
+    @Body() createZoneDto: CreateZoneDto,
+    @CurrentUser() actor: Actor,
+  ) {
+    return this.zoneService.create(createZoneDto, actor);
   }
 
   @Get()
