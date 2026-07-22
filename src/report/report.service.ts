@@ -1,7 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { PrinterService } from 'src/printer/printer.service';
 import { fichaReport } from './documents/ficha.report';
-import { addDay, weekEnd, weekStart } from '@formkit/tempo';
+import { addDay } from '@formkit/tempo';
+import { weekStart, weekEnd } from 'src/common/datetime/tempo';
 import { Request } from 'express';
 import { AccountService } from 'src/account/account.service';
 import { UserService } from '../user/user.service';
@@ -15,9 +16,9 @@ export class ReportService {
     private readonly zoneService: ZoneService,
   ) {}
 
-  async getDaysWeek() {
-    const start = weekStart(new Date(), 1);
-    const end = weekEnd(new Date(), 1);
+  async getDaysWeek(tz: string) {
+    const start = weekStart(new Date(), 1, tz);
+    const end = weekEnd(new Date(), 1, tz);
 
     const diasSemana = [];
     let diaActual = start;
@@ -30,7 +31,7 @@ export class ReportService {
     return diasSemana;
   }
 
-  async getFichaPagos(request: Request, zoneId: string) {
+  async getFichaPagos(request: Request, zoneId: string, tz: string) {
     //@ts-ignore
     const id = request.user.id;
     //@ts-ignore
@@ -40,12 +41,13 @@ export class ReportService {
 
     const accounts = await this.userService.getAccounts(id, zoneId);
 
-    const daysWeek = await this.getDaysWeek();
+    const daysWeek = await this.getDaysWeek(tz);
     const docDefinitions = fichaReport({
       user: name,
       zone: zone.name,
       daysWeek,
       accounts,
+      tz,
     });
 
     return this.printerService.createPdf(docDefinitions);

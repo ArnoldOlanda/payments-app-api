@@ -7,20 +7,19 @@ interface PDFData {
   zone: string;
   daysWeek: Date[];
   accounts: any[];
+  tz: string;
 }
 
 export const fichaReport = (data: PDFData): TDocumentDefinitions => {
-  const datesFormated = data.daysWeek.map((d) =>
-    capitalize(format(d, 'ddd DD', 'es-ES')),
-  );
-  const dateNumberStart = format(data.daysWeek[0], 'D', 'es-ES');
-  const dateNumberEnd = format(
-    data.daysWeek[data.daysWeek.length - 1],
-    'D',
-    'es-ES',
-  );
-  const monthName = capitalize(format(data.daysWeek[0], 'MMMM', 'es-ES'));
-  const yearName = format(data.daysWeek[0], 'YYYY', 'es-ES');
+  const f = (d: Date, fmt: string) =>
+    format({ date: d, format: fmt, locale: 'es-ES', tz: data.tz });
+  const safeFormat = (d: Date | null | undefined, fmt: string) =>
+    d instanceof Date && !Number.isNaN(d.getTime()) ? f(d, fmt) : '—';
+  const datesFormated = data.daysWeek.map((d) => capitalize(f(d, 'ddd DD')));
+  const dateNumberStart = f(data.daysWeek[0], 'D');
+  const dateNumberEnd = f(data.daysWeek[data.daysWeek.length - 1], 'D');
+  const monthName = capitalize(f(data.daysWeek[0], 'MMMM'));
+  const yearName = f(data.daysWeek[0], 'YYYY');
 
   return {
     pageOrientation: 'portrait',
@@ -98,8 +97,8 @@ export const fichaReport = (data: PDFData): TDocumentDefinitions => {
                 i + 1,
                 a.customer.name + ' ' + a.customer.lastName,
                 a.creditType,
-                format(a.date, 'DD/MM/YYYY'),
-                format(a.dueDate, 'DD/MM/YYYY'),
+                safeFormat(a.date, 'DD/MM/YYYY'),
+                safeFormat(a.dueDate, 'DD/MM/YYYY'),
                 `S/ ${a.amount}`,
                 `S/ ${a.remainingBalance}`,
                 '',

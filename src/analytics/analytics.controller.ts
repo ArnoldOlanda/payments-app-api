@@ -1,12 +1,9 @@
-import {
-  Controller,
-  Get,
-  Query,
-} from '@nestjs/common';
+import { Controller, Get, Query } from '@nestjs/common';
 
 import { Auth } from 'src/auth/decorators/auth.decorator';
 import { ValidRole } from 'src/auth/enums/validRoles.enum';
 import { CurrentUser } from 'src/auth/decorators/current-user.decorator';
+import { CurrentTimezone } from 'src/auth/decorators/current-timezone.decorator';
 import { Actor } from 'src/auth/types/actor.type';
 
 import { AnalyticsService } from './analytics.service';
@@ -22,8 +19,9 @@ export class AnalyticsController {
   getKpis(
     @Query('zoneId') zoneId: string | undefined,
     @CurrentUser() actor: Actor,
+    @CurrentTimezone() tz: string,
   ) {
-    return this.analyticsService.getKpis(zoneId, actor);
+    return this.analyticsService.getKpis(zoneId, actor, tz);
   }
 
   @Get('collections')
@@ -31,8 +29,9 @@ export class AnalyticsController {
   getCollections(
     @Query() query: CollectionsRangeDto,
     @CurrentUser() actor: Actor,
+    @CurrentTimezone() tz: string,
   ) {
-    return this.analyticsService.getCollections(query, actor);
+    return this.analyticsService.getCollections(query, actor, tz);
   }
 
   @Get('distribution/zones')

@@ -13,7 +13,8 @@ import { Actor } from 'src/auth/types/actor.type';
 import { ValidRole } from 'src/auth/enums/validRoles.enum';
 import { loadUserZoneIds } from 'src/auth/helpers/zone-scope.helper';
 
-import { addDay, dayEnd, dayStart, format } from '@formkit/tempo';
+import { addDay, format } from '@formkit/tempo';
+import { dayStart, dayEnd } from 'src/common/datetime/tempo';
 
 import { CollectionsRangeDto } from './dto/collections-range.dto';
 
@@ -73,9 +74,10 @@ export class AnalyticsService {
   async getKpis(
     zoneId: string | undefined,
     actor: Actor,
+    tz: string,
   ): Promise<KpiResponse> {
     const scope = await this.resolveScope(actor, zoneId);
-    const cacheKey = `analytics:kpis:${actor.id}:${zoneId ?? 'ALL'}`;
+    const cacheKey = `analytics:kpis:${actor.id}:${zoneId ?? 'ALL'}:${tz}`;
     const cached = await this.cacheManager.get<KpiResponse>(cacheKey);
     if (cached) {
       this.logger.log(`[cache] kpis hit ${cacheKey}`);
@@ -102,8 +104,8 @@ export class AnalyticsService {
     const pendingRow = await pendingQb.getRawOne<{ sum: string }>();
     const pendingBalance = Number(pendingRow?.sum ?? 0);
 
-    const todayStart = dayStart(new Date());
-    const todayEnd = dayEnd(new Date());
+    const todayStart = dayStart(new Date(), tz);
+    const todayEnd = dayEnd(new Date(), tz);
     const paymentQb = this.paymentRepository
       .createQueryBuilder('payment')
       .leftJoin('payment.account', 'account')
@@ -132,6 +134,7 @@ export class AnalyticsService {
   async getCollections(
     query: CollectionsRangeDto,
     actor: Actor,
+    tz: string,
   ): Promise<CollectionsResponse> {
     const { zoneId, from, to } = query;
     const scope = await this.resolveScope(actor, zoneId);
@@ -140,10 +143,10 @@ export class AnalyticsService {
     const endDate = to ?? today;
     const startDate = from ?? addDay(endDate, -13);
 
-    const startDay = dayStart(startDate);
-    const endDay = dayEnd(endDate);
+    const startDay = dayStart(startDate, tz);
+    const endDay = dayEnd(endDate, tz);
 
-    const cacheKey = `analytics:collections:${actor.id}:${zoneId ?? 'ALL'}:${isoDay(startDay)}:${isoDay(endDay)}`;
+    const cacheKey = `analytics:collections:${actor.id}:${zoneId ?? 'ALL'}:${isoDay(startDay)}:${isoDay(endDay)}:${tz}`;
     const cached = await this.cacheManager.get<CollectionsResponse>(cacheKey);
     if (cached) {
       this.logger.log(`[cache] collections hit ${cacheKey}`);
