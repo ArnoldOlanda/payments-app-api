@@ -1,10 +1,15 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { CreateZoneDto } from './dto/create-zone.dto';
 import { UpdateZoneDto } from './dto/update-zone.dto';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Zone } from './entities/zone.entity';
 import { User } from 'src/user/entities/user.entity';
-import { Repository } from 'typeorm';
+import { Customer } from 'src/customer/entities/customer.entity';
+import { DataSource, Repository } from 'typeorm';
 import { Actor } from 'src/auth/types/actor.type';
 
 @Injectable()
@@ -14,6 +19,7 @@ export class ZoneService {
     private readonly zoneRepository: Repository<Zone>,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    private readonly dataSource: DataSource,
   ) {}
 
   async create(createZoneDto: CreateZoneDto, actor: Actor) {
@@ -54,22 +60,32 @@ export class ZoneService {
   }
 
   async remove(id: string) {
-    try {
-      await this.findOne(id);
+    return this.dataSource.transaction(async (manager) => {
+      const zoneRepo = manager.getRepository(Zone);
+      const customerRepo = manager.getRepository(Customer);
 
-      await this.userRepository.query(
+      const zone = await zoneRepo.findOne({ where: { id } });
+      if (!zone) {
+        throw new NotFoundException(`Zone with id ${id} not found`);
+      }
+
+      const customerCount = await customerRepo.count({
+        where: { zone: { id } },
+      });
+      if (customerCount > 0) {
+        throw new BadRequestException(
+          `No se puede eliminar la zona porque tiene ${customerCount} cliente(s) asignado(s). Reasigná los clientes antes de eliminar la zona.`,
+        );
+      }
+
+      await manager.query(
         `DELETE FROM user_zones_zone WHERE "zoneId" = $1`,
         [id],
       );
 
-      await this.zoneRepository.softDelete(id);
+      await zoneRepo.softDelete(id);
 
       return 'Zone deleted successfully';
-    } catch (error) {
-      if (error instanceof NotFoundException) {
-        throw new NotFoundException(`Zone with id ${id} not found`);
-      }
-      throw error;
-    }
+    });
   }
 }

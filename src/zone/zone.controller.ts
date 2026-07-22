@@ -6,6 +6,7 @@ import {
   Patch,
   Param,
   Delete,
+  ParseUUIDPipe,
 } from '@nestjs/common';
 import { ZoneService } from './zone.service';
 import { CreateZoneDto } from './dto/create-zone.dto';
@@ -48,7 +49,7 @@ export class ZoneController {
 
   @Delete(':id')
   @Auth(ValidRole.ADMIN)
-  remove(@Param('id') id: string) {
+  remove(@Param('id', ParseUUIDPipe) id: string) {
     return this.zoneService.remove(id);
   }
 }
