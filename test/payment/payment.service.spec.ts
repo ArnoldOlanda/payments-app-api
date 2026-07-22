@@ -14,6 +14,7 @@ import { AccountStatus } from 'src/account/enums/account-status.enum';
 import { User } from 'src/user/entities/user.entity';
 import { Customer } from 'src/customer/entities/customer.entity';
 import { AccountService } from 'src/account/account.service';
+import { AnalyticsService } from 'src/analytics/analytics.service';
 import { ValidRole } from 'src/auth/enums/validRoles.enum';
 import { Actor } from 'src/auth/types/actor.type';
 
@@ -22,6 +23,7 @@ describe('PaymentService', () => {
   let accountRepo: jest.Mocked<any>;
   let paymentRepo: jest.Mocked<any>;
   let accountService: jest.Mocked<AccountService>;
+  let analyticsService: jest.Mocked<AnalyticsService>;
   let dataSource: jest.Mocked<DataSource>;
   let mockManager: {
     findOne: jest.Mock;
@@ -76,7 +78,10 @@ describe('PaymentService', () => {
           const whereArgs = qb.where.mock.calls[0];
           const id = whereArgs?.[1]?.id;
           if (typeof id !== 'string') return Promise.resolve(null);
-          return accountRepo.findOne({ where: { id }, lock: { mode: 'pessimistic_write' } });
+          return accountRepo.findOne({
+            where: { id },
+            lock: { mode: 'pessimistic_write' },
+          });
         });
         return qb;
       }),
@@ -119,6 +124,12 @@ describe('PaymentService', () => {
           },
         },
         {
+          provide: AnalyticsService,
+          useValue: {
+            invalidateCache: jest.fn().mockResolvedValue(undefined),
+          },
+        },
+        {
           provide: DataSource,
           useValue: {
             transaction: jest.fn(async (cb: any) => cb(mockManager)),
@@ -131,6 +142,7 @@ describe('PaymentService', () => {
     accountRepo = module.get(getRepositoryToken(Account));
     paymentRepo = module.get(getRepositoryToken(Payment));
     accountService = module.get(AccountService);
+    analyticsService = module.get(AnalyticsService);
     dataSource = module.get(DataSource);
 
     mockManager.findOne.mockImplementation((entity: any, options: any) => {
@@ -140,22 +152,25 @@ describe('PaymentService', () => {
       return Promise.resolve(null);
     });
 
-      mockManager.createQueryBuilder.mockImplementation(() => {
-        const qb: any = {
-          leftJoinAndSelect: jest.fn().mockReturnThis(),
-          where: jest.fn().mockReturnThis(),
-          andWhere: jest.fn().mockReturnThis(),
-          setLock: jest.fn().mockReturnThis(),
-          getOne: jest.fn(),
-        };
-        qb.getOne.mockImplementation(() => {
-          const whereArgs = qb.where.mock.calls[0];
-          const id = whereArgs?.[1]?.id;
-          if (typeof id !== 'string') return Promise.resolve(null);
-          return accountRepo.findOne({ where: { id }, lock: { mode: 'pessimistic_write' } });
+    mockManager.createQueryBuilder.mockImplementation(() => {
+      const qb: any = {
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        setLock: jest.fn().mockReturnThis(),
+        getOne: jest.fn(),
+      };
+      qb.getOne.mockImplementation(() => {
+        const whereArgs = qb.where.mock.calls[0];
+        const id = whereArgs?.[1]?.id;
+        if (typeof id !== 'string') return Promise.resolve(null);
+        return accountRepo.findOne({
+          where: { id },
+          lock: { mode: 'pessimistic_write' },
         });
-        return qb;
       });
+      return qb;
+    });
   });
 
   describe('create()', () => {
@@ -246,6 +261,7 @@ describe('PaymentService', () => {
       expect(account.status).toBe(AccountStatus.ACTIVE);
       expect(mockManager.save).toHaveBeenCalledTimes(2);
       expect(accountService.invalidateCache).toHaveBeenCalledTimes(1);
+      expect(analyticsService.invalidateCache).toHaveBeenCalledTimes(1);
     });
 
     it('should flip status to FINISHED when balance hits exactly 0', async () => {
@@ -263,6 +279,7 @@ describe('PaymentService', () => {
 
       await expect(service.create(dto, adminActor)).rejects.toThrow('db down');
       expect(accountService.invalidateCache).not.toHaveBeenCalled();
+      expect(analyticsService.invalidateCache).not.toHaveBeenCalled();
     });
 
     it('should reject Prestamista when account customer zone is not in their zones', async () => {
@@ -360,6 +377,7 @@ describe('PaymentService', () => {
       expect((updated as Payment).amount).toBe(300);
       expect(mockManager.save).toHaveBeenCalledWith(account);
       expect(accountService.invalidateCache).toHaveBeenCalledTimes(1);
+      expect(analyticsService.invalidateCache).toHaveBeenCalledTimes(1);
     });
 
     it('should revert status from FINISHED to ACTIVE when refund brings balance > 0', async () => {
@@ -387,6 +405,7 @@ describe('PaymentService', () => {
 
       expect(mockManager.save).not.toHaveBeenCalled();
       expect(accountService.invalidateCache).not.toHaveBeenCalled();
+      expect(analyticsService.invalidateCache).not.toHaveBeenCalled();
     });
 
     it('should accept accountId when it matches the current payment account (idempotent)', async () => {
@@ -430,6 +449,7 @@ describe('PaymentService', () => {
         'payment-uuid-1',
       );
       expect(accountService.invalidateCache).toHaveBeenCalledTimes(1);
+      expect(analyticsService.invalidateCache).toHaveBeenCalledTimes(1);
       expect(message).toBe('Pago eliminado con éxito');
     });
 
@@ -456,6 +476,7 @@ describe('PaymentService', () => {
 
       await expect(service.remove('payment-uuid-1')).rejects.toThrow('db down');
       expect(accountService.invalidateCache).not.toHaveBeenCalled();
+      expect(analyticsService.invalidateCache).not.toHaveBeenCalled();
     });
   });
 

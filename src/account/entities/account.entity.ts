@@ -52,12 +52,12 @@ export class Account extends BaseEntity implements AccountInterface {
   @OneToMany(() => Payment, (payment) => payment.account)
   payments: Payment[];
 
-  @CreateDateColumn()
+  @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;
 
-  @UpdateDateColumn({ select: false })
+  @UpdateDateColumn({ type: 'timestamptz', select: false })
   updatedAt: Date;
 
-  @DeleteDateColumn({ select: false })
+  @DeleteDateColumn({ type: 'timestamptz', select: false })
   deletedAt: Date;
 }

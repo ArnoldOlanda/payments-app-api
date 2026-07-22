@@ -21,12 +21,12 @@ export class Role extends BaseEntity implements RoleInterface {
   @OneToMany(() => User, (user) => user.role)
   users: User[];
 
-  @CreateDateColumn({ select: false })
+  @CreateDateColumn({ type: 'timestamptz', select: false })
   createdAt: Date;
 
-  @UpdateDateColumn({ select: false })
+  @UpdateDateColumn({ type: 'timestamptz', select: false })
   updatedAt: Date;
 
-  @DeleteDateColumn({ select: false })
+  @DeleteDateColumn({ type: 'timestamptz', select: false })
   deletedAt: Date;
 }

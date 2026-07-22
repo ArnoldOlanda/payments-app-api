@@ -295,7 +295,9 @@ export class AccountService {
         .set({ status: AccountStatus.FINISHED })
         .where('status = :active', { active: AccountStatus.ACTIVE })
         .andWhere('dueDate IS NOT NULL')
-        .andWhere('dueDate <= CURRENT_DATE')
+        .andWhere(
+          "dueDate AT TIME ZONE 'America/Lima' <= (CURRENT_TIMESTAMP AT TIME ZONE 'America/Lima')::date",
+        )
         .execute();
 
       const updated = result.affected ?? 0;

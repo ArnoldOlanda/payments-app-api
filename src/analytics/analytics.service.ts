@@ -1,9 +1,4 @@
-import {
-  ForbiddenException,
-  Inject,
-  Injectable,
-  Logger,
-} from '@nestjs/common';
+import { ForbiddenException, Inject, Injectable, Logger } from '@nestjs/common';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -75,7 +70,10 @@ export class AnalyticsService {
     private readonly dataSource: DataSource,
   ) {}
 
-  async getKpis(zoneId: string | undefined, actor: Actor): Promise<KpiResponse> {
+  async getKpis(
+    zoneId: string | undefined,
+    actor: Actor,
+  ): Promise<KpiResponse> {
     const scope = await this.resolveScope(actor, zoneId);
     const cacheKey = `analytics:kpis:${actor.id}:${zoneId ?? 'ALL'}`;
     const cached = await this.cacheManager.get<KpiResponse>(cacheKey);
@@ -191,7 +189,8 @@ export class AnalyticsService {
   ): Promise<ZoneDistributionResponse> {
     const scope = await this.resolveScope(actor, zoneId);
     const cacheKey = `analytics:zone-dist:${actor.id}:${zoneId ?? 'ALL'}`;
-    const cached = await this.cacheManager.get<ZoneDistributionResponse>(cacheKey);
+    const cached =
+      await this.cacheManager.get<ZoneDistributionResponse>(cacheKey);
     if (cached) {
       this.logger.log(`[cache] zone-dist hit ${cacheKey}`);
       return cached;
@@ -274,7 +273,7 @@ export class AnalyticsService {
     actor: Actor,
   ) {
     const scope = await this.resolveScope(actor, zoneId);
-    const cacheKey = `analytics:recent-payments:${actor.id}:${zoneId ?? 'ALL'}:${limit}:${from?.toISOString() ?? ''}:${to?.toISOString() ?? ''}`;
+    const cacheKey = `analytics:recent-payments:v2:${actor.id}:${zoneId ?? 'ALL'}:${limit}:${from?.toISOString() ?? ''}:${to?.toISOString() ?? ''}`;
     const cached = await this.cacheManager.get<unknown[]>(cacheKey);
     if (cached) {
       this.logger.log(`[cache] recent-payments hit ${cacheKey}`);
@@ -287,6 +286,7 @@ export class AnalyticsService {
       .leftJoinAndSelect('account.customer', 'customer')
       .leftJoinAndSelect('customer.zone', 'zone')
       .leftJoinAndSelect('payment.user', 'user')
+      .addSelect('payment.createdAt')
       .orderBy('payment.date', 'DESC')
       .take(limit);
 
@@ -307,7 +307,11 @@ export class AnalyticsService {
     zoneId?: string,
   ): Promise<ResolvedScope> {
     if (!zoneId) {
-      return { zoneIds: isAdmin(actor) ? null : await loadUserZoneIds(this.dataSource.manager, actor.id) };
+      return {
+        zoneIds: isAdmin(actor)
+          ? null
+          : await loadUserZoneIds(this.dataSource.manager, actor.id),
+      };
     }
 
     if (!isAdmin(actor)) {

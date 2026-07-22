@@ -38,12 +38,12 @@ export class Customer extends BaseEntity implements CustomerInterface {
   @OneToMany(() => Account, (account) => account.customer)
   accounts: Account[];
 
-  @CreateDateColumn({ select: false })
+  @CreateDateColumn({ type: 'timestamptz', select: false })
   createdAt: Date;
 
-  @UpdateDateColumn({ select: false })
+  @UpdateDateColumn({ type: 'timestamptz', select: false })
   updatedAt: Date;
 
-  @DeleteDateColumn({ select: false })
+  @DeleteDateColumn({ type: 'timestamptz', select: false })
   deletedAt: Date;
 }

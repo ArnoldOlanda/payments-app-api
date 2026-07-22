@@ -18,12 +18,12 @@ export class Zone extends BaseEntity implements ZoneInterface {
   @OneToMany(() => Customer, (customer) => customer.zone)
   customers: Customer[];
 
-  @CreateDateColumn({ select: false })
+  @CreateDateColumn({ type: 'timestamptz', select: false })
   createdAt: Date;
 
-  @UpdateDateColumn({ select: false })
+  @UpdateDateColumn({ type: 'timestamptz', select: false })
   updatedAt: Date;
 
-  @DeleteDateColumn({ select: false })
+  @DeleteDateColumn({ type: 'timestamptz', select: false })
   deletedAt: Date;
 }

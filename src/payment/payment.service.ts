@@ -10,6 +10,7 @@ import { DataSource, Repository } from 'typeorm';
 import { Account } from 'src/account/entities/account.entity';
 import { AccountStatus } from 'src/account/enums/account-status.enum';
 import { AccountService } from 'src/account/account.service';
+import { AnalyticsService } from 'src/analytics/analytics.service';
 
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { UpdatePaymentDto } from './dto/update-payment.dto';
@@ -28,6 +29,7 @@ export class PaymentService {
     @InjectRepository(Payment)
     private readonly paymentRepository: Repository<Payment>,
     private readonly accountService: AccountService,
+    private readonly analyticsService: AnalyticsService,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -99,6 +101,7 @@ export class PaymentService {
     });
 
     await this.accountService.invalidateCache();
+    await this.analyticsService.invalidateCache();
     return savedPayment;
   }
 
@@ -225,6 +228,7 @@ export class PaymentService {
     });
 
     await this.accountService.invalidateCache();
+    await this.analyticsService.invalidateCache();
     return updated;
   }
 
@@ -260,6 +264,7 @@ export class PaymentService {
     });
 
     await this.accountService.invalidateCache();
+    await this.analyticsService.invalidateCache();
     return message;
   }
 }

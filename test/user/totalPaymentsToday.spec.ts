@@ -58,7 +58,7 @@ describe('UserService.totalPaymentsToday()', () => {
     );
   });
 
-  it('should query using DATE(p.date) = CURRENT_DATE (not p.date = CURRENT_DATE)', async () => {
+  it('should filter p.date against today in America/Lima (not UTC) and bind userId', async () => {
     userRepo.findOne.mockResolvedValue({ id: 'user-1' } as any);
 
     const qb = {
@@ -77,10 +77,34 @@ describe('UserService.totalPaymentsToday()', () => {
     await service.totalPaymentsToday('user-1');
 
     const whereArgs = qb.where.mock.calls[0];
-    expect(whereArgs[0]).toBe('DATE(p.date) = CURRENT_DATE');
+    expect(whereArgs[0]).toBe(
+      "DATE(p.date AT TIME ZONE 'America/Lima') = (CURRENT_TIMESTAMP AT TIME ZONE 'America/Lima')::date",
+    );
+    expect(whereArgs[0]).not.toBe('DATE(p.date) = CURRENT_DATE');
+    expect(whereArgs[0]).toContain("'America/Lima'");
 
     const andWhereArgs = qb.andWhere.mock.calls[0];
     expect(andWhereArgs[0]).toBe('p.userId = :userId');
     expect(andWhereArgs[1]).toEqual({ userId: 'user-1' });
+  });
+
+  it('should never use raw CURRENT_DATE without a TIME ZONE cast (regression: cobranzas-after-7pm-Lima bug)', async () => {
+    userRepo.findOne.mockResolvedValue({ id: 'user-1' } as any);
+
+    const qb = {
+      innerJoin: jest.fn().mockReturnThis(),
+      select: jest.fn().mockReturnThis(),
+      addSelect: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      groupBy: jest.fn().mockReturnThis(),
+      getRawMany: jest.fn().mockResolvedValue([]),
+    };
+    paymentRepo.createQueryBuilder.mockReturnValue(qb);
+
+    await service.totalPaymentsToday('user-1');
+
+    const whereArgs = qb.where.mock.calls[0];
+    expect(whereArgs[0]).not.toMatch(/=\s*CURRENT_DATE\b/);
   });
 });

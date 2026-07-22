@@ -336,9 +336,36 @@ describe('AccountService', () => {
         active: AccountStatus.ACTIVE,
       });
       expect(updateQb.andWhere).toHaveBeenCalledWith('dueDate IS NOT NULL');
-      expect(updateQb.andWhere).toHaveBeenCalledWith('dueDate <= CURRENT_DATE');
+      expect(updateQb.andWhere).toHaveBeenCalledWith(
+        "dueDate AT TIME ZONE 'America/Lima' <= (CURRENT_TIMESTAMP AT TIME ZONE 'America/Lima')::date",
+      );
       expect(updateQb.execute).toHaveBeenCalledTimes(1);
       expect(accountRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('should never use raw dueDate <= CURRENT_DATE without a TIME ZONE cast (regression: late-evening Lima cron bug)', async () => {
+      const updateQb = {
+        update: jest.fn().mockReturnThis(),
+        set: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        execute: jest.fn().mockResolvedValue({ affected: 0 }),
+      };
+      accountRepo.createQueryBuilder.mockReturnValue(updateQb);
+
+      await service.handleCron();
+
+      const dueDateFilter = updateQb.andWhere.mock.calls.find(
+        (call: unknown[]) =>
+          typeof call[0] === 'string' &&
+          /dueDate[\s\S]*<=/.test(call[0]) &&
+          !/NOT NULL/i.test(call[0]),
+      );
+
+      expect(dueDateFilter).toBeDefined();
+      expect(dueDateFilter![0]).toContain("'America/Lima'");
+      expect(dueDateFilter![0]).not.toBe('dueDate <= CURRENT_DATE');
+      expect(dueDateFilter![0]).not.toMatch(/<=\s*CURRENT_DATE\b/);
     });
 
     it('should NOT call find() (which would N+1)', async () => {
