@@ -23,7 +23,7 @@ export const fichaReport = (data: PDFData): TDocumentDefinitions => {
   const yearName = format(data.daysWeek[0], 'YYYY', 'es-ES');
 
   return {
-    pageOrientation: 'landscape',
+    pageOrientation: 'portrait',
     header: {
       text: 'Artidev',
       alignment: 'right',
@@ -35,7 +35,7 @@ export const fichaReport = (data: PDFData): TDocumentDefinitions => {
         style: 'header',
         alignment: 'center',
         bold: true,
-        fontSize: 20,
+        fontSize: 16,
         margin: [0, 10, 0, 20],
       },
       {
@@ -45,25 +45,25 @@ export const fichaReport = (data: PDFData): TDocumentDefinitions => {
             style: 'header',
             alignment: 'left',
             bold: true,
-            fontSize: 12,
+            fontSize: 10,
           },
           {
             text: `Semana: ${dateNumberStart}-${dateNumberEnd} de ${monthName} de ${yearName}`,
             style: 'header',
             alignment: 'right',
             bold: true,
-            fontSize: 12,
+            fontSize: 10,
           },
         ],
       },
       {
         text: 'Usuario: ' + data.user,
         bold: true,
-        fontSize: 12,
+        fontSize: 10,
       },
       {
         margin: [0, 10],
-        fontSize: 10,
+        fontSize: 8,
         table: {
           widths: [
             'auto',
