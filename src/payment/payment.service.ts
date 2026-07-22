@@ -100,8 +100,8 @@ export class PaymentService {
       return persisted;
     });
 
-    await this.accountService.invalidateCache();
-    await this.analyticsService.invalidateCache();
+    // await this.accountService.invalidateCache();
+    // await this.analyticsService.invalidateCache();
     return savedPayment;
   }
 
@@ -227,8 +227,8 @@ export class PaymentService {
       return manager.save(payment);
     });
 
-    await this.accountService.invalidateCache();
-    await this.analyticsService.invalidateCache();
+    // await this.accountService.invalidateCache();
+    // await this.analyticsService.invalidateCache();
     return updated;
   }
 
@@ -263,8 +263,8 @@ export class PaymentService {
       return `Pago eliminado con éxito`;
     });
 
-    await this.accountService.invalidateCache();
-    await this.analyticsService.invalidateCache();
+    // await this.accountService.invalidateCache();
+    // await this.analyticsService.invalidateCache();
     return message;
   }
 }

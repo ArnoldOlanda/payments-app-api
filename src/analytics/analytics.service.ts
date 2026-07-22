@@ -345,9 +345,9 @@ export class AnalyticsService {
     });
   }
 
-  async invalidateCache(): Promise<void> {
-    const keys = Array.from(this.cacheKeys);
-    this.cacheKeys.clear();
-    await Promise.all(keys.map((key) => this.cacheManager.del(key)));
-  }
+  // async invalidateCache(): Promise<void> {
+  //   const keys = Array.from(this.cacheKeys);
+  //   this.cacheKeys.clear();
+  //   await Promise.all(keys.map((key) => this.cacheManager.del(key)));
+  // }
 }

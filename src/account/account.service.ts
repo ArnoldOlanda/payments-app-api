@@ -72,18 +72,18 @@ export class AccountService {
       customer,
     });
 
-    await this.invalidateCache();
+    // await this.invalidateCache();
     return this.accountRepository.save(account);
   }
 
   async findAll(paginationDto: PaginateAccountDto, actor: Actor) {
     const cacheKey = `accounts:${actor.id}:${JSON.stringify(paginationDto)}`;
 
-    const cachedData = await this.cacheManager.get(cacheKey);
-    if (cachedData) {
-      this.logger.log('Returning cached data');
-      return cachedData;
-    }
+    // const cachedData = await this.cacheManager.get(cacheKey);
+    // if (cachedData) {
+    //   this.logger.log('Returning cached data');
+    //   return cachedData;
+    // }
 
     const { zoneId, status, page, limit } = paginationDto;
     const skip = (page - 1) * limit;
@@ -244,7 +244,7 @@ export class AccountService {
       return manager.save(existing);
     });
 
-    await this.invalidateCache();
+    // await this.invalidateCache();
     return account;
   }
 
@@ -258,7 +258,7 @@ export class AccountService {
     );
 
     await this.accountRepository.softDelete(id);
-    await this.invalidateCache();
+    // await this.invalidateCache();
     return `Account deleted successfully`;
   }
 
@@ -286,7 +286,7 @@ export class AccountService {
     return results;
   }
 
-  @Cron(CronExpression.EVERY_DAY_AT_1AM)
+  // @Cron(CronExpression.EVERY_DAY_AT_1AM)
   async handleCron() {
     try {
       const result = await this.accountRepository
@@ -303,7 +303,7 @@ export class AccountService {
       const updated = result.affected ?? 0;
       this.logger.log(`${updated} accounts status updated`);
       if (updated > 0) {
-        await this.invalidateCache();
+        // await this.invalidateCache();
       }
     } catch (error) {
       this.logger.error(
@@ -313,9 +313,9 @@ export class AccountService {
     }
   }
 
-  async invalidateCache() {
-    const keys = Array.from(this.cacheKeys);
-    this.cacheKeys.clear();
-    await Promise.all(keys.map((key) => this.cacheManager.del(key)));
-  }
+  // async invalidateCache() {
+  //   const keys = Array.from(this.cacheKeys);
+  //   this.cacheKeys.clear();
+  //   await Promise.all(keys.map((key) => this.cacheManager.del(key)));
+  // }
 }
