@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { JwtService } from '@nestjs/jwt';
-import { UnauthorizedException } from '@nestjs/common';
+import { UnauthorizedException, BadRequestException } from '@nestjs/common';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import * as bcrypt from 'bcryptjs';
 import { createHash } from 'crypto';
@@ -37,6 +37,7 @@ describe('AuthService', () => {
           provide: UserService,
           useValue: {
             findBy: jest.fn(),
+            updateTimezone: jest.fn(),
           },
         },
         {
@@ -164,6 +165,89 @@ describe('AuthService', () => {
     });
   });
 
+  describe('X-Timezone capture', () => {
+    it('persists a valid X-Timezone header on the user and embeds it in the JWT payload', async () => {
+      const userMock = buildUserMock({ timezone: 'UTC' });
+      userService.findBy.mockResolvedValue(userMock as any);
+      userService.updateTimezone.mockImplementation(
+        async (_id, tz) =>
+          ({
+            ...userMock,
+            payments: [],
+            passwordResetTokens: [],
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            deletedAt: null,
+            timezone: tz,
+          }) as any,
+      );
+
+      await service.validate(
+        { email: 'test@example.com', password: 'correctPassword' } as any,
+        res,
+        'America/Argentina/Buenos_Aires',
+      );
+
+      expect(userService.updateTimezone).toHaveBeenCalledTimes(1);
+      expect(userService.updateTimezone).toHaveBeenCalledWith(
+        'user-uuid-1',
+        'America/Argentina/Buenos_Aires',
+      );
+
+      const signArg = jwtService.sign.mock.calls[0][0] as Record<
+        string,
+        unknown
+      >;
+      expect(signArg.timezone).toBe('America/Argentina/Buenos_Aires');
+    });
+
+    it('rejects an invalid X-Timezone with BadRequestException and does NOT persist', async () => {
+      const userMock = buildUserMock();
+      userService.findBy.mockResolvedValue(userMock as any);
+
+      await expect(
+        service.validate(
+          { email: 'test@example.com', password: 'correctPassword' } as any,
+          res,
+          'Mars/Olympus_Mons',
+        ),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(userService.updateTimezone).not.toHaveBeenCalled();
+    });
+
+    it('does NOT touch the user row when X-Timezone is absent', async () => {
+      const userMock = buildUserMock({ timezone: 'Europe/Madrid' });
+      userService.findBy.mockResolvedValue(userMock as any);
+
+      await service.validate(
+        { email: 'test@example.com', password: 'correctPassword' } as any,
+        res,
+      );
+
+      expect(userService.updateTimezone).not.toHaveBeenCalled();
+
+      const signArg = jwtService.sign.mock.calls[0][0] as Record<
+        string,
+        unknown
+      >;
+      expect(signArg.timezone).toBe('Europe/Madrid');
+    });
+
+    it('does NOT touch the user row when X-Timezone is undefined explicitly', async () => {
+      const userMock = buildUserMock({ timezone: 'UTC' });
+      userService.findBy.mockResolvedValue(userMock as any);
+
+      await service.validate(
+        { email: 'test@example.com', password: 'correctPassword' } as any,
+        res,
+        undefined,
+      );
+
+      expect(userService.updateTimezone).not.toHaveBeenCalled();
+    });
+  });
+
   describe('refreshToken()', () => {
     const validStored = (overrides: Partial<any> = {}) => ({
       id: 'rt-1',
@@ -183,18 +267,18 @@ describe('AuthService', () => {
     it('should reject when token has no row in refresh_token table', async () => {
       refreshTokenRepo.findOne.mockResolvedValue(null);
 
-      await expect(
-        service.refreshToken('valid-raw-token'),
-      ).rejects.toThrow(UnauthorizedException);
+      await expect(service.refreshToken('valid-raw-token')).rejects.toThrow(
+        UnauthorizedException,
+      );
     });
 
     it('should detect reuse, revoke all user tokens, and reject', async () => {
       const stored = validStored({ revokedAt: new Date(Date.now() - 1000) });
       refreshTokenRepo.findOne.mockResolvedValue(stored);
 
-      await expect(
-        service.refreshToken('valid-raw-token'),
-      ).rejects.toThrow(/reuse detected/i);
+      await expect(service.refreshToken('valid-raw-token')).rejects.toThrow(
+        /reuse detected/i,
+      );
 
       expect(refreshTokenRepo.update).toHaveBeenCalledWith(
         { userId: 'user-uuid-1', revokedAt: expect.anything() },
@@ -207,9 +291,9 @@ describe('AuthService', () => {
         validStored({ expiresAt: new Date(Date.now() - 1) }),
       );
 
-      await expect(
-        service.refreshToken('valid-raw-token'),
-      ).rejects.toThrow(/expired/i);
+      await expect(service.refreshToken('valid-raw-token')).rejects.toThrow(
+        /expired/i,
+      );
     });
 
     it('should reject when JWT payload id does not match the stored userId', async () => {
@@ -220,9 +304,9 @@ describe('AuthService', () => {
         exp: 2,
       });
 
-      await expect(
-        service.refreshToken('valid-raw-token'),
-      ).rejects.toThrow(/mismatch/i);
+      await expect(service.refreshToken('valid-raw-token')).rejects.toThrow(
+        /mismatch/i,
+      );
     });
 
     it('should revoke the consumed token, persist the new one, and return a fresh pair', async () => {
@@ -269,9 +353,9 @@ describe('AuthService', () => {
       refreshTokenRepo.findOne.mockResolvedValue(validStored());
       jwtService.verifyAsync.mockRejectedValue(new Error('bad signature'));
 
-      await expect(
-        service.refreshToken('valid-raw-token'),
-      ).rejects.toThrow(UnauthorizedException);
+      await expect(service.refreshToken('valid-raw-token')).rejects.toThrow(
+        UnauthorizedException,
+      );
     });
   });
 

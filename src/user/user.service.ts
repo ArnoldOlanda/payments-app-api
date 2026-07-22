@@ -13,6 +13,7 @@ import { encryptPassword } from 'src/helpers/encryptPassword';
 import { Zone } from 'src/zone/entities/zone.entity';
 import { Payment } from 'src/payment/entities/payment.entity';
 import { AccountStatus } from 'src/account/enums/account-status.enum';
+import { assertIanaTimezone } from 'src/common/datetime/iana-timezone.validator';
 
 @Injectable()
 export class UserService {
@@ -108,9 +109,39 @@ export class UserService {
   async findBy(field: keyof User, value: string) {
     return this.userRepository.findOne({
       where: { [field]: value },
-      select: ['id', 'name', 'email', 'password'],
+      select: ['id', 'name', 'email', 'password', 'timezone'],
       relations: ['zones'],
     });
+  }
+
+  /**
+   * Update only the user's IANA timezone column. Used by the auth pipeline
+   * (X-Timezone header on login) and by the PATCH /users/me/timezone endpoint.
+   *
+   * Returns the updated User row so callers have the canonical state.
+   */
+  async updateTimezone(userId: string, timezone: string): Promise<User> {
+    assertIanaTimezone(timezone);
+    const existing = await this.userRepository.findOne({
+      where: { id: userId },
+    });
+    if (!existing) {
+      throw new NotFoundException(`User with id ${userId} not found`);
+    }
+    // Idempotent: no-op when the value is already the same. Avoids an UPDATE
+    // round-trip and keeps the column touched-at timestamp clean.
+    if (existing.timezone === timezone) {
+      return existing;
+    }
+    await this.userRepository.update(userId, { timezone });
+    const updated = await this.userRepository.findOne({
+      where: { id: userId },
+    });
+    if (!updated) {
+      // Row vanished between the two reads — should not happen in practice.
+      throw new NotFoundException(`User with id ${userId} not found`);
+    }
+    return updated;
   }
 
   async update(id: string, updateUserDto: UpdateUserDto) {

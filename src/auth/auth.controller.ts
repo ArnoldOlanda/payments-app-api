@@ -6,6 +6,7 @@ import {
   Res,
   BadRequestException,
   HttpCode,
+  Headers,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { CreateAuthDto } from './dto/create-auth.dto';
@@ -28,9 +29,10 @@ export class AuthController {
   @Post('login')
   async login(
     @Body() createAuthDto: CreateAuthDto,
+    @Headers('x-timezone') xTimezone: string | undefined,
     @Res() res: Response,
   ) {
-    await this.authService.validate(createAuthDto, res);
+    await this.authService.validate(createAuthDto, res, xTimezone);
   }
 
   @Throttle({ default: { limit: 30, ttl: 15 * 60 * 1000 } })

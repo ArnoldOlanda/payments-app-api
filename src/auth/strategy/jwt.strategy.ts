@@ -22,7 +22,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   // Este método valida el token decodificado (el payload)
-  async validate(payload: { id: string }) {
+  async validate(payload: { id: string; timezone?: string }) {
     // Aquí podrías hacer más validaciones o cargar el usuario desde la base de datos
     const user = await this.userRepository.findOne({
       where: { id: payload.id },
@@ -31,6 +31,9 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     if (!user) {
       throw new UnauthorizedException('Token no válido');
     }
+    // The user row's `timezone` column is the source of truth at validate time.
+    // For tokens issued before this feature landed (no `timezone` claim), the
+    // column default `'UTC'` covers the gap.
     return { ...user, role: user.role.name };
   }
 }

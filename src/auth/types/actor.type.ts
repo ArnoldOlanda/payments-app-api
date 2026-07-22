@@ -1,3 +1,3 @@
 import { User } from 'src/user/entities/user.entity';
 
-export type Actor = User & { role: string };
+export type Actor = User & { role: string; timezone: string };

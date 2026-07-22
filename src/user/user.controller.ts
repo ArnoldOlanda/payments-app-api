@@ -11,6 +11,7 @@ import {
 import { UserService } from './user.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { UpdateTimezoneDto } from './dto/update-timezone.dto';
 import { AssignZonesDto } from './dto/assign-zones.dto';
 import { Auth } from 'src/auth/decorators/auth.decorator';
 import { ValidRole } from 'src/auth/enums/validRoles.enum';
@@ -25,6 +26,22 @@ export class UserController {
   @Auth(ValidRole.ADMIN, ValidRole.PRESTAMISTA)
   getMe(@CurrentUser() actor: Actor) {
     return this.userService.getMe(actor);
+  }
+
+  // Per-user timezone. The actor can only change THEIR OWN timezone —
+  // the id is read from the JWT, never from the URL. The new timezone
+  // applies on the next login (Option A: no JWT rotation on this endpoint).
+  @Patch('me/timezone')
+  @Auth(ValidRole.ADMIN, ValidRole.PRESTAMISTA)
+  async updateMyTimezone(
+    @CurrentUser() actor: Actor,
+    @Body() updateTimezoneDto: UpdateTimezoneDto,
+  ): Promise<{ timezone: string }> {
+    const updated = await this.userService.updateTimezone(
+      actor.id,
+      updateTimezoneDto.timezone,
+    );
+    return { timezone: updated.timezone };
   }
 
   @Post()

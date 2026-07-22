@@ -22,6 +22,7 @@ describe('UserService', () => {
       save: jest.fn((data) => Promise.resolve({ id: 'user-1', ...data })),
       preload: jest.fn((data) => Promise.resolve(data)),
       softDelete: jest.fn(),
+      update: jest.fn(),
     };
     const zoneRepoMock = {
       findOne: jest.fn(),
@@ -227,6 +228,55 @@ describe('UserService', () => {
       await expect(service.getMe({ id: 'gone' })).rejects.toThrow(
         NotFoundException,
       );
+    });
+  });
+
+  describe('updateTimezone()', () => {
+    it('writes the new timezone and returns the updated user', async () => {
+      userRepo.findOne
+        .mockResolvedValueOnce({ id: 'u-1', timezone: 'UTC' } as any)
+        .mockResolvedValueOnce({
+          id: 'u-1',
+          timezone: 'America/Argentina/Buenos_Aires',
+        } as any);
+      userRepo.update.mockResolvedValue({ affected: 1 } as any);
+
+      const result = await service.updateTimezone(
+        'u-1',
+        'America/Argentina/Buenos_Aires',
+      );
+
+      expect(userRepo.update).toHaveBeenCalledWith('u-1', {
+        timezone: 'America/Argentina/Buenos_Aires',
+      });
+      expect(result.timezone).toBe('America/Argentina/Buenos_Aires');
+    });
+
+    it('is idempotent — no UPDATE when the value is unchanged', async () => {
+      userRepo.findOne.mockResolvedValueOnce({
+        id: 'u-1',
+        timezone: 'UTC',
+      } as any);
+
+      const result = await service.updateTimezone('u-1', 'UTC');
+
+      expect(userRepo.update).not.toHaveBeenCalled();
+      expect(result.timezone).toBe('UTC');
+    });
+
+    it('throws NotFoundException when the user row does not exist', async () => {
+      userRepo.findOne.mockResolvedValueOnce(null);
+
+      await expect(service.updateTimezone('ghost', 'UTC')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('throws BadRequestException on an invalid IANA identifier', async () => {
+      await expect(
+        service.updateTimezone('u-1', 'Mars/Olympus_Mons'),
+      ).rejects.toThrow();
+      expect(userRepo.update).not.toHaveBeenCalled();
     });
   });
 });

@@ -40,6 +40,13 @@ export class User extends BaseEntity implements UserInterface {
   @Exclude({ toPlainOnly: true })
   password: string;
 
+  @Column({
+    type: 'varchar',
+    length: 64,
+    default: 'UTC',
+  })
+  timezone: string;
+
   @ManyToOne(() => Role, (role) => role.users, { eager: true })
   role: Role;
 

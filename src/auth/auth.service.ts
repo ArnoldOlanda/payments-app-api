@@ -15,6 +15,7 @@ import { UserService } from 'src/user/user.service';
 import { verifyPassword } from 'src/helpers/verifyPassword';
 import { buildCookieOptions } from 'src/helpers/cookieConfig';
 import { RefreshToken } from './entities/refresh-token.entity';
+import { assertIanaTimezone } from 'src/common/datetime/iana-timezone.validator';
 
 const REFRESH_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days, matches JWT expiresIn
 
@@ -32,7 +33,11 @@ export class AuthService {
     private readonly refreshTokenRepo: Repository<RefreshToken>,
   ) {}
 
-  async validate(createAuthDto: CreateAuthDto, res: Response) {
+  async validate(
+    createAuthDto: CreateAuthDto,
+    res: Response,
+    xTimezone?: string,
+  ) {
     const userByEmail = await this.userService.findBy(
       'email',
       createAuthDto.email,
@@ -50,7 +55,19 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials-password');
     }
 
-    const payload = { id: userByEmail.id };
+    // X-Timezone capture: validate, then lazily persist on the user row.
+    // Throws BadRequestException for invalid IANA identifiers. No DB write
+    // when the header is absent. `updateTimezone` is idempotent.
+    if (xTimezone) {
+      assertIanaTimezone(xTimezone);
+      const updated = await this.userService.updateTimezone(
+        userByEmail.id,
+        xTimezone,
+      );
+      userByEmail.timezone = updated.timezone;
+    }
+
+    const payload = { id: userByEmail.id, timezone: userByEmail.timezone };
     const token = this.generateToken(payload);
     const refreshToken = await this.generateRefreshToken(payload);
 
