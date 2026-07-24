@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { NotFoundException } from '@nestjs/common';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import { DataSource } from 'typeorm';
 
 import { CustomerService } from 'src/customer/customer.service';
 import { Customer } from 'src/customer/entities/customer.entity';
@@ -12,15 +12,8 @@ describe('CustomerService.update()', () => {
   let service: CustomerService;
   let customerRepo: jest.Mocked<any>;
   let zoneRepo: jest.Mocked<any>;
-  let cacheStore: Map<string, any>;
-  let cacheDelSpy: jest.Mock;
 
   beforeEach(async () => {
-    cacheStore = new Map();
-    cacheDelSpy = jest.fn(async (key: string) => {
-      cacheStore.delete(key);
-    });
-
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         CustomerService,
@@ -44,13 +37,9 @@ describe('CustomerService.update()', () => {
           useValue: { remove: jest.fn() },
         },
         {
-          provide: CACHE_MANAGER,
+          provide: DataSource,
           useValue: {
-            get: jest.fn(async (key: string) => cacheStore.get(key)),
-            set: jest.fn(async (key: string, value: any) => {
-              cacheStore.set(key, value);
-            }),
-            del: cacheDelSpy,
+            manager: {},
           },
         },
       ],

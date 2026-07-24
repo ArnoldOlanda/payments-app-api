@@ -1,14 +1,11 @@
 import {
   ConflictException,
-  Inject,
+  ForbiddenException,
   Injectable,
-  Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { Cache } from 'cache-manager';
+import { DataSource, Repository } from 'typeorm';
 
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
@@ -16,19 +13,20 @@ import { PaginationDto } from './dto/pagination.dto';
 import { AccountService } from 'src/account/account.service';
 import { Zone } from 'src/zone/entities/zone.entity';
 import { Customer } from './entities/customer.entity';
+import { ValidRole } from 'src/auth/enums/validRoles.enum';
+import { Actor } from 'src/auth/types/actor.type';
+import { loadUserZoneIds } from 'src/auth/helpers/zone-scope.helper';
+
+const isAdmin = (user: Actor): boolean => user.role === ValidRole.ADMIN;
 
 @Injectable()
 export class CustomerService {
-  //logger
-  private readonly logger = new Logger(CustomerService.name);
-  private readonly cacheKeys = new Set<string>();
-
   constructor(
     @InjectRepository(Customer)
     private readonly customerRepository: Repository<Customer>,
     @InjectRepository(Zone) private readonly zoneRepository: Repository<Zone>,
     private readonly accountService: AccountService,
-    @Inject(CACHE_MANAGER) private cacheManager: Cache,
+    private readonly dataSource: DataSource,
   ) {}
 
   async create(createCustomerDto: CreateCustomerDto) {
@@ -49,9 +47,8 @@ export class CustomerService {
       });
 
       const savedCustomer = await this.customerRepository.save(customer);
-      await this.invalidateCache();
       return savedCustomer;
-    } catch (error) {
+    } catch (error: any) {
       if (error.code === '23505') {
         throw new ConflictException('El correo o el documento ya esta en uso');
       }
@@ -59,31 +56,35 @@ export class CustomerService {
     }
   }
 
-  async findAll(paginationDto: PaginationDto): Promise<any> {
-    // Crear una clave única para esta consulta basada en los parámetros
-    const cacheKey = `customers:${JSON.stringify(paginationDto)}`;
-
-    // Verificar si tenemos estos resultados en caché
-    const cachedData = await this.cacheManager.get(cacheKey);
-
-    if (cachedData) {
-      this.logger.log('Returning cached data');
-      return cachedData;
-    }
-
+  async findAll(paginationDto: PaginationDto, actor: Actor): Promise<any> {
     const { zoneId, search, page = 1, limit = 10, all = false } = paginationDto;
 
-    // Usar QueryBuilder para manejar correctamente las condiciones OR
+    let userZoneIds: string[] | null = null;
+    if (!isAdmin(actor)) {
+      userZoneIds = await loadUserZoneIds(this.dataSource.manager, actor.id);
+      if (userZoneIds.length === 0) {
+        const empty = {
+          data: [],
+          total: 0,
+          page: 1,
+          limit,
+          lastPage: 1,
+        };
+
+        return empty;
+      }
+    }
+
     const queryBuilder = this.customerRepository
       .createQueryBuilder('customer')
       .leftJoinAndSelect('customer.zone', 'zone');
 
-    // Añadir condición de zona si se proporciona
     if (zoneId) {
       queryBuilder.andWhere('zone.id = :zoneId', { zoneId });
+    } else if (userZoneIds !== null) {
+      queryBuilder.andWhere('zone.id IN (:...userZoneIds)', { userZoneIds });
     }
 
-    // Añadir condiciones de búsqueda si se proporciona
     if (search) {
       const searchValue = `%${search}%`;
       queryBuilder.andWhere(
@@ -97,7 +98,6 @@ export class CustomerService {
       );
     }
 
-    // Si all=true, devolver todos los resultados sin paginar pero manteniendo el mismo shape
     if (all) {
       const [data, total] = await queryBuilder.getManyAndCount();
       const result = {
@@ -107,20 +107,15 @@ export class CustomerService {
         limit: total,
         lastPage: 1,
       };
-      await this.cacheManager.set(cacheKey, result);
-      this.cacheKeys.add(cacheKey);
       return result;
     }
 
-    // Validar que page y limit sean positivos
     const validPage = Math.max(1, page);
     const validLimit = Math.max(1, limit);
     const skip = (validPage - 1) * validLimit;
 
-    // Añadir paginación
     queryBuilder.skip(skip).take(validLimit);
 
-    // Ejecutar la consulta
     const [data, total] = await queryBuilder.getManyAndCount();
 
     const result = {
@@ -131,30 +126,56 @@ export class CustomerService {
       lastPage: Math.ceil(total / validLimit),
     };
 
-    // Guardar en caché los resultados
-    await this.cacheManager.set(cacheKey, result);
-    this.cacheKeys.add(cacheKey);
-
     return result;
   }
 
-  async findOne(id: string) {
-    const customer = await this.customerRepository.findOne({ where: { id } });
-
-    if (!customer) throw new NotFoundException('Customer not found');
-
-    return customer;
-  }
-
-  async findCredits(id: string) {
+  async findOne(id: string, actor: Actor) {
     const customer = await this.customerRepository.findOne({
       where: { id },
-      relations: ['accounts'],
+      relations: ['zone'],
     });
 
     if (!customer) throw new NotFoundException('Customer not found');
 
+    await this.assertCustomerZoneAccess(customer, actor);
+
+    return customer;
+  }
+
+  async findCredits(id: string, actor: Actor) {
+    const customer = await this.customerRepository.findOne({
+      where: { id },
+      relations: ['accounts', 'zone'],
+    });
+
+    if (!customer) throw new NotFoundException('Customer not found');
+
+    await this.assertCustomerZoneAccess(customer, actor);
+
     return customer.accounts;
+  }
+
+  private async assertCustomerZoneAccess(
+    customer: { zone?: { id: string } | null },
+    actor: Actor,
+  ): Promise<void> {
+    if (isAdmin(actor)) return;
+
+    if (!customer.zone) {
+      throw new ForbiddenException(
+        'Customer has no zone assigned; cannot validate access',
+      );
+    }
+
+    const userZoneIds = await loadUserZoneIds(
+      this.dataSource.manager,
+      actor.id,
+    );
+    if (!userZoneIds.includes(customer.zone.id)) {
+      throw new ForbiddenException(
+        'Customer is not within the user assigned zones',
+      );
+    }
   }
 
   async update(id: string, updateCustomerDto: UpdateCustomerDto) {
@@ -178,7 +199,6 @@ export class CustomerService {
       }
     }
 
-    await this.invalidateCache();
     return await this.customerRepository.save(customer);
   }
 
@@ -197,16 +217,8 @@ export class CustomerService {
       ),
     );
 
-    await this.invalidateCache();
     await this.customerRepository.softDelete(id);
 
     return 'Customer deleted successfully';
-  }
-
-  // Método para invalidar la caché cuando se crea, actualiza o elimina un cliente
-  async invalidateCache(): Promise<void> {
-    const keys = Array.from(this.cacheKeys);
-    this.cacheKeys.clear();
-    await Promise.all(keys.map((key) => this.cacheManager.del(key)));
   }
 }
