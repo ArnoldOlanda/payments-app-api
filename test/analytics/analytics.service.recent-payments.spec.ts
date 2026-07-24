@@ -1,6 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ForbiddenException } from '@nestjs/common';
-import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { DataSource } from 'typeorm';
 import { getRepositoryToken } from '@nestjs/typeorm';
 
@@ -16,9 +15,6 @@ describe('AnalyticsService.getRecentPayments()', () => {
   let paymentRepo: { createQueryBuilder: jest.Mock };
   let accountRepo: { createQueryBuilder: jest.Mock };
   let customerRepo: { createQueryBuilder: jest.Mock };
-  let cacheStore: Map<string, unknown>;
-  let cacheGetSpy: jest.Mock;
-  let cacheSetSpy: jest.Mock;
   let dataSource: { manager: { findOne: jest.Mock } };
 
   const adminActor: Actor = { id: 'admin-1', role: ValidRole.ADMIN } as Actor;
@@ -45,11 +41,6 @@ describe('AnalyticsService.getRecentPayments()', () => {
     paymentRepo = { createQueryBuilder: jest.fn() };
     accountRepo = { createQueryBuilder: jest.fn() };
     customerRepo = { createQueryBuilder: jest.fn() };
-    cacheStore = new Map();
-    cacheGetSpy = jest.fn(async (key: string) => cacheStore.get(key) ?? null);
-    cacheSetSpy = jest.fn(async (key: string, value: unknown) => {
-      cacheStore.set(key, value);
-    });
     dataSource = { manager: { findOne: jest.fn() } };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -58,10 +49,6 @@ describe('AnalyticsService.getRecentPayments()', () => {
         { provide: getRepositoryToken(Account), useValue: accountRepo },
         { provide: getRepositoryToken(Payment), useValue: paymentRepo },
         { provide: getRepositoryToken(Customer), useValue: customerRepo },
-        {
-          provide: CACHE_MANAGER,
-          useValue: { get: cacheGetSpy, set: cacheSetSpy },
-        },
         { provide: DataSource, useValue: dataSource },
       ],
     }).compile();
@@ -71,25 +58,6 @@ describe('AnalyticsService.getRecentPayments()', () => {
 
   beforeEach(async () => {
     await buildModule();
-  });
-
-  it('returns the cached value without hitting the repository when the cache has a hit', async () => {
-    const cached = [{ id: 'cached-1', amount: 100 }];
-    const from = new Date('2026-07-21T05:00:00.000Z');
-    const to = new Date('2026-07-22T04:59:59.999Z');
-    const cacheKey = `analytics:recent-payments:v2:${adminActor.id}:ALL:10:${from.toISOString()}:${to.toISOString()}`;
-    cacheStore.set(cacheKey, cached);
-
-    const result = await service.getRecentPayments(
-      undefined,
-      10,
-      from,
-      to,
-      adminActor,
-    );
-
-    expect(result).toBe(cached);
-    expect(paymentRepo.createQueryBuilder).not.toHaveBeenCalled();
   });
 
   it('filters by from/to with BETWEEN when both are provided', async () => {
@@ -155,23 +123,6 @@ describe('AnalyticsService.getRecentPayments()', () => {
 
     expect(qb.orderBy).toHaveBeenCalledWith('payment.date', 'DESC');
     expect(qb.take).toHaveBeenCalledWith(25);
-  });
-
-  it('caches the result after a fresh DB read', async () => {
-    const qb = buildQb();
-    paymentRepo.createQueryBuilder.mockReturnValue(qb);
-
-    const from = new Date('2026-07-21T05:00:00.000Z');
-    const to = new Date('2026-07-22T04:59:59.999Z');
-
-    await service.getRecentPayments(undefined, 10, from, to, adminActor);
-
-    expect(cacheSetSpy).toHaveBeenCalledTimes(1);
-    const [key, value] = cacheSetSpy.mock.calls[0];
-    expect(typeof key).toBe('string');
-    expect(key).toContain('analytics:recent-payments');
-    expect(key).toMatch(/^analytics:recent-payments:v2:/);
-    expect(value).toEqual([{ id: 'payment-1' }]);
   });
 
   it('rejects a Prestamista that requests a zone outside their assigned zones', async () => {

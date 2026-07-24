@@ -1,7 +1,6 @@
 import {
   BadRequestException,
   ForbiddenException,
-  Inject,
   Injectable,
   Logger,
   NotFoundException,
@@ -16,8 +15,6 @@ import { AccountStatus } from './enums/account-status.enum';
 import { PaginateAccountDto } from './dto/paginate-account.dto';
 import { Payment } from 'src/payment/entities/payment.entity';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { CACHE_MANAGER } from '@nestjs/cache-manager';
-import { Cache } from 'cache-manager';
 import { ValidRole } from 'src/auth/enums/validRoles.enum';
 import { Actor } from 'src/auth/types/actor.type';
 import { loadUserZoneIds } from 'src/auth/helpers/zone-scope.helper';
@@ -27,7 +24,6 @@ const isAdmin = (user: Actor): boolean => user.role === ValidRole.ADMIN;
 @Injectable()
 export class AccountService {
   private readonly logger = new Logger(AccountService.name);
-  private readonly cacheKeys = new Set<string>();
 
   constructor(
     @InjectRepository(Account)
@@ -36,7 +32,6 @@ export class AccountService {
     private readonly customerRepository: Repository<Customer>,
     @InjectRepository(Payment)
     private readonly paymentRepository: Repository<Payment>,
-    @Inject(CACHE_MANAGER) private cacheManager: Cache,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -72,19 +67,10 @@ export class AccountService {
       customer,
     });
 
-    // await this.invalidateCache();
     return this.accountRepository.save(account);
   }
 
   async findAll(paginationDto: PaginateAccountDto, actor: Actor) {
-    const cacheKey = `accounts:${actor.id}:${JSON.stringify(paginationDto)}`;
-
-    // const cachedData = await this.cacheManager.get(cacheKey);
-    // if (cachedData) {
-    //   this.logger.log('Returning cached data');
-    //   return cachedData;
-    // }
-
     const { zoneId, status, page, limit } = paginationDto;
     const skip = (page - 1) * limit;
 
@@ -94,13 +80,10 @@ export class AccountService {
         actor.id,
       );
       if (userZoneIds.length === 0) {
-        const empty = {
+        return {
           data: [],
           meta: { total: 0, limit, totalPages: 0, currentPage: page },
         };
-        await this.cacheManager.set(cacheKey, empty);
-        this.cacheKeys.add(cacheKey);
-        return empty;
       }
     }
 
@@ -131,7 +114,7 @@ export class AccountService {
 
     const [accounts, total] = await query.getManyAndCount();
 
-    const results = {
+    return {
       data: accounts,
       meta: {
         total,
@@ -140,11 +123,6 @@ export class AccountService {
         currentPage: page,
       },
     };
-
-    await this.cacheManager.set(cacheKey, results);
-    this.cacheKeys.add(cacheKey);
-
-    return results;
   }
 
   async findOne(id: string, actor: Actor) {
@@ -244,7 +222,6 @@ export class AccountService {
       return manager.save(existing);
     });
 
-    // await this.invalidateCache();
     return account;
   }
 
@@ -258,19 +235,10 @@ export class AccountService {
     );
 
     await this.accountRepository.softDelete(id);
-    // await this.invalidateCache();
     return `Account deleted successfully`;
   }
 
   async getAccountsByCustomer(userId: string) {
-    const cacheKey = 'accountsByCustomer';
-    const cachedData = await this.cacheManager.get(cacheKey);
-
-    if (cachedData) {
-      this.logger.log('Returning cached data');
-      return cachedData;
-    }
-
     const query = this.accountRepository
       .createQueryBuilder('account')
       .leftJoinAndSelect('account.customer', 'customer')
@@ -280,42 +248,40 @@ export class AccountService {
     query.where('account.status = :status', { status: AccountStatus.ACTIVE });
     query.andWhere('user.id = :userId', { userId });
 
-    const results = await query.getMany();
-    await this.cacheManager.set(cacheKey, results);
-    this.cacheKeys.add(cacheKey);
-    return results;
+    return query.getMany();
   }
 
-  // @Cron(CronExpression.EVERY_DAY_AT_1AM)
+  @Cron(CronExpression.EVERY_DAY_AT_1AM)
   async handleCron() {
     try {
-      const result = await this.accountRepository
+      const overdueResult = await this.accountRepository
         .createQueryBuilder()
         .update(Account)
-        .set({ status: AccountStatus.FINISHED })
+        .set({ status: AccountStatus.OVERDUE })
         .where('status = :active', { active: AccountStatus.ACTIVE })
         .andWhere('dueDate IS NOT NULL')
+        .andWhere('remainingBalance > 0')
         .andWhere(
           "dueDate AT TIME ZONE 'America/Lima' <= (CURRENT_TIMESTAMP AT TIME ZONE 'America/Lima')::date",
         )
         .execute();
 
-      const updated = result.affected ?? 0;
-      this.logger.log(`${updated} accounts status updated`);
-      if (updated > 0) {
-        // await this.invalidateCache();
-      }
+      const finishedResult = await this.accountRepository
+        .createQueryBuilder()
+        .update(Account)
+        .set({ status: AccountStatus.FINISHED })
+        .where('status = :active', { active: AccountStatus.ACTIVE })
+        .andWhere('remainingBalance = 0')
+        .execute();
+
+      const overdue = overdueResult.affected ?? 0;
+      const finished = finishedResult.affected ?? 0;
+      this.logger.log(`Cron: ${overdue} overdue, ${finished} finished`);
     } catch (error) {
       this.logger.error(
-        'handleCron failed to mark overdue accounts as FINISHED',
+        'handleCron failed to update account statuses',
         error instanceof Error ? error.stack : String(error),
       );
     }
   }
-
-  // async invalidateCache() {
-  //   const keys = Array.from(this.cacheKeys);
-  //   this.cacheKeys.clear();
-  //   await Promise.all(keys.map((key) => this.cacheManager.del(key)));
-  // }
 }

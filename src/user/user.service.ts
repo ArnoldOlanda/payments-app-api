@@ -268,7 +268,9 @@ export class UserService {
       .leftJoinAndSelect('user.zones', 'zone')
       .leftJoinAndSelect('zone.customers', 'customer')
       .leftJoinAndSelect('customer.accounts', 'account')
-      .where('account.status = :status', { status: AccountStatus.ACTIVE })
+      .where('account.status IN (:...activeStatuses)', {
+        activeStatuses: [AccountStatus.ACTIVE, AccountStatus.OVERDUE],
+      })
       .andWhere('user.id = :userId', { userId })
       .andWhere('zone.id = :zoneId', { zoneId })
       .getOne();

@@ -1,5 +1,4 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import {
   ForbiddenException,
   NotFoundException,
@@ -22,8 +21,6 @@ describe('AccountService', () => {
   let accountRepo: jest.Mocked<any>;
   let customerRepo: jest.Mocked<any>;
   let dataSource: jest.Mocked<DataSource>;
-  let cacheStore: Map<string, any>;
-  let cacheDelSpy: jest.Mock;
 
   const adminActor = { id: 'admin-1', role: ValidRole.ADMIN } as Actor;
   const prestamistaActor = {
@@ -50,11 +47,6 @@ describe('AccountService', () => {
   };
 
   beforeEach(async () => {
-    cacheStore = new Map();
-    cacheDelSpy = jest.fn(async (key: string) => {
-      cacheStore.delete(key);
-    });
-
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AccountService,
@@ -77,16 +69,6 @@ describe('AccountService', () => {
         {
           provide: getRepositoryToken(Payment),
           useValue: { softDelete: jest.fn() },
-        },
-        {
-          provide: CACHE_MANAGER,
-          useValue: {
-            get: jest.fn(async (key: string) => cacheStore.get(key)),
-            set: jest.fn(async (key: string, value: any) => {
-              cacheStore.set(key, value);
-            }),
-            del: cacheDelSpy,
-          },
         },
         {
           provide: DataSource,
@@ -290,72 +272,103 @@ describe('AccountService', () => {
     });
   });
 
-  describe('invalidateCache()', () => {
-    it('should delete every key previously written by findAll', async () => {
-      const qb: any = {
-        leftJoinAndSelect: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        andWhere: jest.fn().mockReturnThis(),
-        orderBy: jest.fn().mockReturnThis(),
-        skip: jest.fn().mockReturnThis(),
-        take: jest.fn().mockReturnThis(),
-        getManyAndCount: jest.fn().mockResolvedValue([[{ id: 'a-1' }], 1]),
-      };
-      accountRepo.createQueryBuilder.mockReturnValue(qb);
-
-      await service.findAll({ page: 1, limit: 10 } as any, adminActor);
-
-      expect(cacheStore.size).toBe(1);
-      const [storedKey] = Array.from(cacheStore.keys());
-
-      await service.invalidateCache();
-
-      expect(cacheDelSpy).toHaveBeenCalledWith(storedKey);
-      expect(cacheStore.has(storedKey)).toBe(false);
-    });
-  });
-
   describe('handleCron()', () => {
-    it('should run a single bulk UPDATE instead of N saves', async () => {
-      const updateQb = {
+    const buildUpdateQb = (
+      setValue: unknown,
+      affected: number,
+      andWhereCalls: Array<unknown[]> = [],
+    ) => {
+      const qb: any = {
         update: jest.fn().mockReturnThis(),
-        set: jest.fn().mockReturnThis(),
+        set: jest.fn().mockImplementation(function (this: any, value: unknown) {
+          setValue = value;
+          return this;
+        }),
         where: jest.fn().mockReturnThis(),
-        andWhere: jest.fn().mockReturnThis(),
-        execute: jest.fn().mockResolvedValue({ affected: 3 }),
+        andWhere: jest.fn().mockImplementation(function (
+          this: any,
+          ...args: unknown[]
+        ) {
+          andWhereCalls.push(args);
+          return this;
+        }),
+        execute: jest.fn().mockResolvedValue({ affected }),
       };
-      accountRepo.createQueryBuilder.mockReturnValue(updateQb);
+      (qb as any)._setValue = () => setValue;
+      return qb;
+    };
+
+    it('should issue two bulk UPDATEs (overdue + finished) instead of N saves', async () => {
+      const overdueSetRef = { value: undefined as unknown };
+      const overdueWhereRef: Array<unknown[]> = [];
+      const overdueQb = buildUpdateQb(
+        overdueSetRef.value,
+        3,
+        overdueWhereRef,
+      ) as any;
+      overdueQb.set.mockImplementation((v: unknown) => {
+        overdueSetRef.value = v;
+        return overdueQb;
+      });
+
+      const finishedSetRef = { value: undefined as unknown };
+      const finishedWhereRef: Array<unknown[]> = [];
+      const finishedQb = buildUpdateQb(
+        finishedSetRef.value,
+        1,
+        finishedWhereRef,
+      ) as any;
+      finishedQb.set.mockImplementation((v: unknown) => {
+        finishedSetRef.value = v;
+        return finishedQb;
+      });
+
+      accountRepo.createQueryBuilder
+        .mockReturnValueOnce(overdueQb)
+        .mockReturnValueOnce(finishedQb);
 
       await service.handleCron();
 
-      expect(updateQb.update).toHaveBeenCalledWith(Account);
-      expect(updateQb.set).toHaveBeenCalledWith({
-        status: AccountStatus.FINISHED,
-      });
-      expect(updateQb.where).toHaveBeenCalledWith('status = :active', {
+      expect(overdueQb.update).toHaveBeenCalledWith(Account);
+      expect(finishedQb.update).toHaveBeenCalledWith(Account);
+
+      expect(overdueSetRef.value).toEqual({ status: AccountStatus.OVERDUE });
+      expect(finishedSetRef.value).toEqual({ status: AccountStatus.FINISHED });
+
+      expect(overdueQb.where).toHaveBeenCalledWith('status = :active', {
         active: AccountStatus.ACTIVE,
       });
-      expect(updateQb.andWhere).toHaveBeenCalledWith('dueDate IS NOT NULL');
-      expect(updateQb.andWhere).toHaveBeenCalledWith(
-        "dueDate AT TIME ZONE 'America/Lima' <= (CURRENT_TIMESTAMP AT TIME ZONE 'America/Lima')::date",
+      expect(finishedQb.where).toHaveBeenCalledWith('status = :active', {
+        active: AccountStatus.ACTIVE,
+      });
+
+      expect(overdueWhereRef.map((c) => c[0])).toEqual(
+        expect.arrayContaining([
+          'dueDate IS NOT NULL',
+          'remainingBalance > 0',
+          "dueDate AT TIME ZONE 'America/Lima' <= (CURRENT_TIMESTAMP AT TIME ZONE 'America/Lima')::date",
+        ]),
       );
-      expect(updateQb.execute).toHaveBeenCalledTimes(1);
+
+      expect(finishedWhereRef.map((c) => c[0])).toEqual([
+        'remainingBalance = 0',
+      ]);
+
+      expect(overdueQb.execute).toHaveBeenCalledTimes(1);
+      expect(finishedQb.execute).toHaveBeenCalledTimes(1);
       expect(accountRepo.save).not.toHaveBeenCalled();
     });
 
     it('should never use raw dueDate <= CURRENT_DATE without a TIME ZONE cast (regression: late-evening Lima cron bug)', async () => {
-      const updateQb = {
-        update: jest.fn().mockReturnThis(),
-        set: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        andWhere: jest.fn().mockReturnThis(),
-        execute: jest.fn().mockResolvedValue({ affected: 0 }),
-      };
-      accountRepo.createQueryBuilder.mockReturnValue(updateQb);
+      const overdueQb = buildUpdateQb(undefined, 0);
+      const finishedQb = buildUpdateQb(undefined, 0);
+      accountRepo.createQueryBuilder
+        .mockReturnValueOnce(overdueQb)
+        .mockReturnValueOnce(finishedQb);
 
       await service.handleCron();
 
-      const dueDateFilter = updateQb.andWhere.mock.calls.find(
+      const dueDateFilter = overdueQb.andWhere.mock.calls.find(
         (call: unknown[]) =>
           typeof call[0] === 'string' &&
           /dueDate[\s\S]*<=/.test(call[0]) &&
@@ -369,14 +382,11 @@ describe('AccountService', () => {
     });
 
     it('should NOT call find() (which would N+1)', async () => {
-      const updateQb = {
-        update: jest.fn().mockReturnThis(),
-        set: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        andWhere: jest.fn().mockReturnThis(),
-        execute: jest.fn().mockResolvedValue({ affected: 0 }),
-      };
-      accountRepo.createQueryBuilder.mockReturnValue(updateQb);
+      const overdueQb = buildUpdateQb(undefined, 0);
+      const finishedQb = buildUpdateQb(undefined, 0);
+      accountRepo.createQueryBuilder
+        .mockReturnValueOnce(overdueQb)
+        .mockReturnValueOnce(finishedQb);
 
       await service.handleCron();
 
@@ -391,30 +401,51 @@ describe('AccountService', () => {
       await expect(service.handleCron()).resolves.toBeUndefined();
     });
 
-    it('should invalidate cache only when something changed', async () => {
-      const updateQbNoop = {
-        update: jest.fn().mockReturnThis(),
-        set: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        andWhere: jest.fn().mockReturnThis(),
-        execute: jest.fn().mockResolvedValue({ affected: 0 }),
-      };
-      accountRepo.createQueryBuilder.mockReturnValue(updateQbNoop);
+    it('should mark ACTIVE+overdue+balance>0 as OVERDUE (regression: original bug marked them FINISHED)', async () => {
+      const overdueSetRef = { value: undefined as unknown };
+      const overdueQb = buildUpdateQb(overdueSetRef.value, 5) as any;
+      overdueQb.set.mockImplementation((v: unknown) => {
+        overdueSetRef.value = v;
+        return overdueQb;
+      });
+      const finishedQb = buildUpdateQb(undefined, 0);
+      accountRepo.createQueryBuilder
+        .mockReturnValueOnce(overdueQb)
+        .mockReturnValueOnce(finishedQb);
 
       await service.handleCron();
-      expect(cacheDelSpy).not.toHaveBeenCalled();
 
-      const updateQbChanged = {
-        update: jest.fn().mockReturnThis(),
-        set: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        andWhere: jest.fn().mockReturnThis(),
-        execute: jest.fn().mockResolvedValue({ affected: 2 }),
-      };
-      accountRepo.createQueryBuilder.mockReturnValue(updateQbChanged);
+      expect(overdueSetRef.value).toEqual({ status: AccountStatus.OVERDUE });
+      expect(overdueSetRef.value).not.toEqual({
+        status: AccountStatus.FINISHED,
+      });
+      expect(overdueQb.andWhere).toHaveBeenCalledWith('remainingBalance > 0');
+    });
+
+    it('should ONLY mark as FINISHED when remainingBalance = 0 (not based on dueDate)', async () => {
+      const overdueQb = buildUpdateQb(undefined, 0);
+      const finishedSetRef = { value: undefined as unknown };
+      const finishedQb = buildUpdateQb(finishedSetRef.value, 2) as any;
+      finishedQb.set.mockImplementation((v: unknown) => {
+        finishedSetRef.value = v;
+        return finishedQb;
+      });
+      accountRepo.createQueryBuilder
+        .mockReturnValueOnce(overdueQb)
+        .mockReturnValueOnce(finishedQb);
 
       await service.handleCron();
-      expect(cacheDelSpy).toHaveBeenCalledTimes(0);
+
+      expect(finishedSetRef.value).toEqual({ status: AccountStatus.FINISHED });
+      const finishedAndWhere = finishedQb.andWhere.mock.calls;
+      const finishedHasDueDateFilter = finishedAndWhere.some(
+        (call: unknown[]) =>
+          typeof call[0] === 'string' &&
+          /dueDate[\s\S]*<=/.test(call[0]) &&
+          !/NOT NULL/i.test(call[0]),
+      );
+      expect(finishedHasDueDateFilter).toBe(false);
+      expect(finishedQb.andWhere).toHaveBeenCalledWith('remainingBalance = 0');
     });
   });
 
@@ -602,37 +633,22 @@ describe('AccountService', () => {
       expect(mockManager.save).not.toHaveBeenCalled();
     });
 
-    it('should invalidate cache after a successful update', async () => {
+    it('should persist the update without invalidating cache (cache removed)', async () => {
       const account = buildAccount();
       mockManager.findOne.mockResolvedValue(account);
 
-      const qb: any = {
-        leftJoinAndSelect: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        andWhere: jest.fn().mockReturnThis(),
-        orderBy: jest.fn().mockReturnThis(),
-        skip: jest.fn().mockReturnThis(),
-        take: jest.fn().mockReturnThis(),
-        getManyAndCount: jest.fn().mockResolvedValue([[{ id: 'a-1' }], 1]),
-      };
-      accountRepo.createQueryBuilder.mockReturnValue(qb);
-      await service.findAll({ page: 1, limit: 10 } as any, adminActor);
-      const cachedKey = Array.from(cacheStore.keys())[0];
-      expect(cachedKey).toBeDefined();
-
       await service.update('account-uuid-1', { amount: 1500 }, adminActor);
 
-      expect(cacheDelSpy).toHaveBeenCalledWith(cachedKey);
-      expect(cacheStore.has(cachedKey)).toBe(false);
+      expect(mockManager.save).toHaveBeenCalledTimes(1);
     });
 
-    it('should NOT invalidate cache when the transaction throws', async () => {
+    it('should not call save when the transaction throws', async () => {
       mockManager.findOne.mockRejectedValue(new Error('db down'));
 
       await expect(
         service.update('account-uuid-1', { amount: 1500 }, adminActor),
       ).rejects.toThrow('db down');
-      expect(cacheDelSpy).not.toHaveBeenCalled();
+      expect(mockManager.save).not.toHaveBeenCalled();
     });
 
     it('should wrap update in a transaction with pessimistic_write lock on the account row', async () => {

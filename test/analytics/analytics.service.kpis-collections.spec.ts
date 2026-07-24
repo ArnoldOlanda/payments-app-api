@@ -1,21 +1,16 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { DataSource } from 'typeorm';
 import { getRepositoryToken } from '@nestjs/typeorm';
 
 import { AnalyticsService } from 'src/analytics/analytics.service';
 import { Account } from 'src/account/entities/account.entity';
+import { AccountStatus } from 'src/account/enums/account-status.enum';
 import { Payment } from 'src/payment/entities/payment.entity';
 import { Customer } from 'src/customer/entities/customer.entity';
 import { Actor } from 'src/auth/types/actor.type';
 import { ValidRole } from 'src/auth/enums/validRoles.enum';
 import { dayStart, dayEnd } from 'src/common/datetime/tempo';
 
-/**
- * Builds a fresh QueryBuilder mock whose chainable methods return itself.
- * `where` is special: it captures its arguments so we can assert the
- * TZ-derived boundary instants the service computed.
- */
 function buildCountQb() {
   const qb: any = {
     leftJoin: jest.fn().mockReturnThis(),
@@ -31,16 +26,10 @@ function buildCountQb() {
 async function buildService(
   opts: {
     paymentRepo?: { createQueryBuilder: jest.Mock };
-    cache?: { get: jest.Mock; set: jest.Mock; del: jest.Mock };
   } = {},
 ) {
   const paymentRepo = opts.paymentRepo ?? {
     createQueryBuilder: jest.fn(() => buildCountQb()),
-  };
-  const cache = opts.cache ?? {
-    get: jest.fn().mockResolvedValue(null),
-    set: jest.fn().mockResolvedValue(undefined),
-    del: jest.fn(),
   };
   const module: TestingModule = await Test.createTestingModule({
     providers: [
@@ -54,7 +43,6 @@ async function buildService(
         provide: getRepositoryToken(Customer),
         useValue: { createQueryBuilder: jest.fn(() => buildCountQb()) },
       },
-      { provide: CACHE_MANAGER, useValue: cache },
       {
         provide: DataSource,
         useValue: {
@@ -66,7 +54,7 @@ async function buildService(
       },
     ],
   }).compile();
-  return { service: module.get(AnalyticsService), paymentRepo, cache };
+  return { service: module.get(AnalyticsService), paymentRepo };
 }
 
 describe('AnalyticsService.getKpis() — TZ-aware', () => {
@@ -77,8 +65,6 @@ describe('AnalyticsService.getKpis() — TZ-aware', () => {
   } as Actor;
 
   it('computes "today" range using the actor TZ, not the container TZ', async () => {
-    // Force "now" to 2025-06-15T15:00:00Z, which is 2025-06-16 00:00 in Tokyo.
-    // Expected Tokyo dayStart == 2025-06-15T15:00:00Z.
     const fixedInstant = new Date('2025-06-15T15:00:00Z');
     jest.useFakeTimers().setSystemTime(fixedInstant);
 
@@ -98,7 +84,6 @@ describe('AnalyticsService.getKpis() — TZ-aware', () => {
   });
 
   it('uses America/Argentina/Buenos_Aires boundaries when tz = ART', async () => {
-    // 2025-06-16T02:00:00Z is 2025-06-15 23:00 ART — "today" in ART is 2025-06-15.
     const fixedInstant = new Date('2025-06-16T02:00:00Z');
     jest.useFakeTimers().setSystemTime(fixedInstant);
 
@@ -122,27 +107,116 @@ describe('AnalyticsService.getKpis() — TZ-aware', () => {
       jest.useRealTimers();
     }
   });
+});
 
-  it('includes the TZ in the cache key (no cross-TZ collisions)', async () => {
-    const cache = {
-      get: jest.fn().mockResolvedValue(null),
-      set: jest.fn().mockResolvedValue(undefined),
-      del: jest.fn(),
+describe('AnalyticsService — OVERDUE counts as debt', () => {
+  const adminActor: Actor = {
+    id: 'admin-1',
+    role: ValidRole.ADMIN,
+    timezone: 'UTC',
+  } as Actor;
+
+  it('getKpis() should filter active accounts and pending balance by [ACTIVE, OVERDUE]', async () => {
+    const activeAccountQb = buildCountQb();
+    const pendingQb = buildCountQb();
+    const accountRepo = {
+      createQueryBuilder: jest
+        .fn()
+        .mockReturnValueOnce(activeAccountQb)
+        .mockReturnValueOnce(pendingQb),
     };
-    const { service } = await buildService({ cache });
+    const paymentRepo = { createQueryBuilder: jest.fn(() => buildCountQb()) };
+    const customerRepo = { createQueryBuilder: jest.fn(() => buildCountQb()) };
 
-    await service.getKpis(undefined, adminActor, 'Asia/Tokyo');
-    await service.getKpis(
-      undefined,
-      adminActor,
-      'America/Argentina/Buenos_Aires',
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        AnalyticsService,
+        { provide: getRepositoryToken(Account), useValue: accountRepo },
+        { provide: getRepositoryToken(Payment), useValue: paymentRepo },
+        { provide: getRepositoryToken(Customer), useValue: customerRepo },
+        {
+          provide: DataSource,
+          useValue: {
+            manager: {
+              find: jest.fn().mockResolvedValue([]),
+              findOne: jest.fn(),
+            },
+          },
+        },
+      ],
+    }).compile();
+
+    const service = module.get(AnalyticsService);
+    await service.getKpis(undefined, adminActor, 'UTC');
+
+    const activeWhere = activeAccountQb.where.mock.calls.find(
+      (c: unknown[]) => typeof c[0] === 'string' && /status/.test(c[0] as string),
     );
-    await service.getKpis(undefined, adminActor, 'Europe/Madrid');
+    const pendingWhere = pendingQb.where.mock.calls.find(
+      (c: unknown[]) => typeof c[0] === 'string' && /status/.test(c[0] as string),
+    );
 
-    const cacheKeys = cache.get.mock.calls.map((c) => c[0] as string);
-    expect(new Set(cacheKeys).size).toBe(3);
-    expect(cacheKeys[0]).toContain('Asia/Tokyo');
-    expect(cacheKeys[1]).toContain('America/Argentina/Buenos_Aires');
-    expect(cacheKeys[2]).toContain('Europe/Madrid');
+    expect(activeWhere).toBeDefined();
+    expect(activeWhere![0]).toBe('account.status IN (:...activeStatuses)');
+    expect(activeWhere![1].activeStatuses).toEqual(
+      expect.arrayContaining([AccountStatus.ACTIVE, AccountStatus.OVERDUE]),
+    );
+    expect(activeWhere![1].activeStatuses).not.toEqual([AccountStatus.ACTIVE]);
+
+    expect(pendingWhere).toBeDefined();
+    expect(pendingWhere![0]).toBe('account.status IN (:...activeStatuses)');
+    expect(pendingWhere![1].activeStatuses).toEqual(
+      expect.arrayContaining([AccountStatus.ACTIVE, AccountStatus.OVERDUE]),
+    );
+  });
+
+  it('getZoneDistribution() should filter by [ACTIVE, OVERDUE]', async () => {
+    const rawQb: any = {
+      leftJoin: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      select: jest.fn().mockReturnThis(),
+      addSelect: jest.fn().mockReturnThis(),
+      groupBy: jest.fn().mockReturnThis(),
+      addGroupBy: jest.fn().mockReturnThis(),
+      orderBy: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockReturnThis(),
+      getRawMany: jest.fn().mockResolvedValue([]),
+    };
+    const accountRepo = { createQueryBuilder: jest.fn(() => rawQb) };
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        AnalyticsService,
+        { provide: getRepositoryToken(Account), useValue: accountRepo },
+        { provide: getRepositoryToken(Payment), useValue: {
+          createQueryBuilder: jest.fn(() => buildCountQb()),
+        } },
+        { provide: getRepositoryToken(Customer), useValue: {
+          createQueryBuilder: jest.fn(() => buildCountQb()),
+        } },
+        {
+          provide: DataSource,
+          useValue: {
+            manager: {
+              find: jest.fn().mockResolvedValue([]),
+              findOne: jest.fn(),
+            },
+          },
+        },
+      ],
+    }).compile();
+
+    const service = module.get(AnalyticsService);
+    await service.getZoneDistribution(undefined, adminActor);
+
+    const statusWhere = rawQb.where.mock.calls.find(
+      (c: unknown[]) => typeof c[0] === 'string' && /status/.test(c[0] as string),
+    );
+    expect(statusWhere).toBeDefined();
+    expect(statusWhere![0]).toBe('account.status IN (:...activeStatuses)');
+    expect(statusWhere![1].activeStatuses).toEqual(
+      expect.arrayContaining([AccountStatus.ACTIVE, AccountStatus.OVERDUE]),
+    );
   });
 });

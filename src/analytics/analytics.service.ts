@@ -1,6 +1,4 @@
-import { ForbiddenException, Inject, Injectable, Logger } from '@nestjs/common';
-import { CACHE_MANAGER } from '@nestjs/cache-manager';
-import { Cache } from 'cache-manager';
+import { ForbiddenException, Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 
@@ -51,14 +49,11 @@ type ResolvedScope = {
   zoneIds: string[] | null;
 };
 
-const CACHE_TTL_MS = 60_000;
-
 const isoDay = (d: Date): string => format(d, 'YYYY-MM-DD', 'en');
 
 @Injectable()
 export class AnalyticsService {
   private readonly logger = new Logger(AnalyticsService.name);
-  private readonly cacheKeys = new Set<string>();
 
   constructor(
     @InjectRepository(Account)
@@ -67,7 +62,6 @@ export class AnalyticsService {
     private readonly paymentRepository: Repository<Payment>,
     @InjectRepository(Customer)
     private readonly customerRepository: Repository<Customer>,
-    @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -77,12 +71,6 @@ export class AnalyticsService {
     tz: string,
   ): Promise<KpiResponse> {
     const scope = await this.resolveScope(actor, zoneId);
-    const cacheKey = `analytics:kpis:${actor.id}:${zoneId ?? 'ALL'}:${tz}`;
-    const cached = await this.cacheManager.get<KpiResponse>(cacheKey);
-    if (cached) {
-      this.logger.log(`[cache] kpis hit ${cacheKey}`);
-      return cached;
-    }
 
     const customerQb = this.customerRepository.createQueryBuilder('customer');
     this.applyZoneScope(customerQb, 'customer', scope);
@@ -91,7 +79,9 @@ export class AnalyticsService {
     const activeAccountQb = this.accountRepository
       .createQueryBuilder('account')
       .leftJoin('account.customer', 'customer')
-      .where('account.status = :status', { status: AccountStatus.ACTIVE });
+      .where('account.status IN (:...activeStatuses)', {
+        activeStatuses: [AccountStatus.ACTIVE, AccountStatus.OVERDUE],
+      });
     this.applyZoneScope(activeAccountQb, 'customer', scope);
     const activeAccounts = await activeAccountQb.getCount();
 
@@ -99,7 +89,9 @@ export class AnalyticsService {
       .createQueryBuilder('account')
       .leftJoin('account.customer', 'customer')
       .select('COALESCE(SUM(account.remainingBalance), 0)', 'sum')
-      .where('account.status = :status', { status: AccountStatus.ACTIVE });
+      .where('account.status IN (:...activeStatuses)', {
+        activeStatuses: [AccountStatus.ACTIVE, AccountStatus.OVERDUE],
+      });
     this.applyZoneScope(pendingQb, 'customer', scope);
     const pendingRow = await pendingQb.getRawOne<{ sum: string }>();
     const pendingBalance = Number(pendingRow?.sum ?? 0);
@@ -119,16 +111,12 @@ export class AnalyticsService {
     const paymentRow = await paymentQb.getRawOne<{ sum: string }>();
     const collectedToday = Number(paymentRow?.sum ?? 0);
 
-    const result: KpiResponse = {
+    return {
       customers,
       activeAccounts,
       pendingBalance,
       collectedToday,
     };
-
-    await this.cacheManager.set(cacheKey, result, CACHE_TTL_MS);
-    this.cacheKeys.add(cacheKey);
-    return result;
   }
 
   async getCollections(
@@ -145,13 +133,6 @@ export class AnalyticsService {
 
     const startDay = dayStart(startDate, tz);
     const endDay = dayEnd(endDate, tz);
-
-    const cacheKey = `analytics:collections:${actor.id}:${zoneId ?? 'ALL'}:${isoDay(startDay)}:${isoDay(endDay)}:${tz}`;
-    const cached = await this.cacheManager.get<CollectionsResponse>(cacheKey);
-    if (cached) {
-      this.logger.log(`[cache] collections hit ${cacheKey}`);
-      return cached;
-    }
 
     const qb = this.paymentRepository
       .createQueryBuilder('payment')
@@ -180,10 +161,7 @@ export class AnalyticsService {
       cursor = addDay(cursor, 1);
     }
 
-    const result: CollectionsResponse = { buckets };
-    await this.cacheManager.set(cacheKey, result, CACHE_TTL_MS);
-    this.cacheKeys.add(cacheKey);
-    return result;
+    return { buckets };
   }
 
   async getZoneDistribution(
@@ -191,13 +169,6 @@ export class AnalyticsService {
     actor: Actor,
   ): Promise<ZoneDistributionResponse> {
     const scope = await this.resolveScope(actor, zoneId);
-    const cacheKey = `analytics:zone-dist:${actor.id}:${zoneId ?? 'ALL'}`;
-    const cached =
-      await this.cacheManager.get<ZoneDistributionResponse>(cacheKey);
-    if (cached) {
-      this.logger.log(`[cache] zone-dist hit ${cacheKey}`);
-      return cached;
-    }
 
     const qb = this.accountRepository
       .createQueryBuilder('account')
@@ -207,7 +178,9 @@ export class AnalyticsService {
       .addSelect('zone.name', 'name')
       .addSelect('COUNT(account.id)', 'count')
       .addSelect('COALESCE(SUM(account.remainingBalance), 0)', 'balance')
-      .where('account.status = :status', { status: AccountStatus.ACTIVE })
+      .where('account.status IN (:...activeStatuses)', {
+        activeStatuses: [AccountStatus.ACTIVE, AccountStatus.OVERDUE],
+      })
       .andWhere('zone.id IS NOT NULL')
       .groupBy('zone.id')
       .addGroupBy('zone.name')
@@ -223,7 +196,7 @@ export class AnalyticsService {
       balance: string;
     }>();
 
-    const result: ZoneDistributionResponse = {
+    return {
       items: rows.map((r) => ({
         zoneId: r.zoneId,
         name: r.name,
@@ -231,10 +204,6 @@ export class AnalyticsService {
         balance: Number(r.balance),
       })),
     };
-
-    await this.cacheManager.set(cacheKey, result, CACHE_TTL_MS);
-    this.cacheKeys.add(cacheKey);
-    return result;
   }
 
   async getUpcomingDue(
@@ -243,12 +212,6 @@ export class AnalyticsService {
     actor: Actor,
   ) {
     const scope = await this.resolveScope(actor, zoneId);
-    const cacheKey = `analytics:upcoming:${actor.id}:${zoneId ?? 'ALL'}:${limit}`;
-    const cached = await this.cacheManager.get<unknown[]>(cacheKey);
-    if (cached) {
-      this.logger.log(`[cache] upcoming hit ${cacheKey}`);
-      return cached;
-    }
 
     const qb = this.accountRepository
       .createQueryBuilder('account')
@@ -262,10 +225,7 @@ export class AnalyticsService {
 
     this.applyZoneScope(qb, 'customer', scope);
 
-    const accounts = await qb.getMany();
-    await this.cacheManager.set(cacheKey, accounts, CACHE_TTL_MS);
-    this.cacheKeys.add(cacheKey);
-    return accounts;
+    return qb.getMany();
   }
 
   async getRecentPayments(
@@ -276,12 +236,6 @@ export class AnalyticsService {
     actor: Actor,
   ) {
     const scope = await this.resolveScope(actor, zoneId);
-    const cacheKey = `analytics:recent-payments:v2:${actor.id}:${zoneId ?? 'ALL'}:${limit}:${from?.toISOString() ?? ''}:${to?.toISOString() ?? ''}`;
-    const cached = await this.cacheManager.get<unknown[]>(cacheKey);
-    if (cached) {
-      this.logger.log(`[cache] recent-payments hit ${cacheKey}`);
-      return cached;
-    }
 
     const qb = this.paymentRepository
       .createQueryBuilder('payment')
@@ -299,10 +253,7 @@ export class AnalyticsService {
 
     this.applyZoneScope(qb, 'customer', scope);
 
-    const payments = await qb.getMany();
-    await this.cacheManager.set(cacheKey, payments, CACHE_TTL_MS);
-    this.cacheKeys.add(cacheKey);
-    return payments;
+    return qb.getMany();
   }
 
   private async resolveScope(
@@ -344,10 +295,4 @@ export class AnalyticsService {
       zoneIds: scope.zoneIds,
     });
   }
-
-  // async invalidateCache(): Promise<void> {
-  //   const keys = Array.from(this.cacheKeys);
-  //   this.cacheKeys.clear();
-  //   await Promise.all(keys.map((key) => this.cacheManager.del(key)));
-  // }
 }

@@ -119,15 +119,11 @@ describe('PaymentService', () => {
         },
         {
           provide: AccountService,
-          useValue: {
-            invalidateCache: jest.fn().mockResolvedValue(undefined),
-          },
+          useValue: {},
         },
         {
           provide: AnalyticsService,
-          useValue: {
-            invalidateCache: jest.fn().mockResolvedValue(undefined),
-          },
+          useValue: {},
         },
         {
           provide: DataSource,
@@ -260,8 +256,6 @@ describe('PaymentService', () => {
       expect(account.remainingBalance).toBe(800);
       expect(account.status).toBe(AccountStatus.ACTIVE);
       expect(mockManager.save).toHaveBeenCalledTimes(2);
-      expect(accountService.invalidateCache).toHaveBeenCalledTimes(1);
-      expect(analyticsService.invalidateCache).toHaveBeenCalledTimes(1);
     });
 
     it('should flip status to FINISHED when balance hits exactly 0', async () => {
@@ -274,12 +268,10 @@ describe('PaymentService', () => {
       expect(account.status).toBe(AccountStatus.FINISHED);
     });
 
-    it('should NOT call invalidateCache if the transaction throws', async () => {
+    it('should propagate the transaction error', async () => {
       accountRepo.findOne.mockRejectedValue(new Error('db down'));
 
       await expect(service.create(dto, adminActor)).rejects.toThrow('db down');
-      expect(accountService.invalidateCache).not.toHaveBeenCalled();
-      expect(analyticsService.invalidateCache).not.toHaveBeenCalled();
     });
 
     it('should reject Prestamista when account customer zone is not in their zones', async () => {
@@ -376,8 +368,6 @@ describe('PaymentService', () => {
       expect(account.remainingBalance).toBe(300);
       expect((updated as Payment).amount).toBe(300);
       expect(mockManager.save).toHaveBeenCalledWith(account);
-      expect(accountService.invalidateCache).toHaveBeenCalledTimes(1);
-      expect(analyticsService.invalidateCache).toHaveBeenCalledTimes(1);
     });
 
     it('should revert status from FINISHED to ACTIVE when refund brings balance > 0', async () => {
@@ -404,8 +394,6 @@ describe('PaymentService', () => {
       ).rejects.toThrow(BadRequestException);
 
       expect(mockManager.save).not.toHaveBeenCalled();
-      expect(accountService.invalidateCache).not.toHaveBeenCalled();
-      expect(analyticsService.invalidateCache).not.toHaveBeenCalled();
     });
 
     it('should accept accountId when it matches the current payment account (idempotent)', async () => {
@@ -448,8 +436,6 @@ describe('PaymentService', () => {
         Payment,
         'payment-uuid-1',
       );
-      expect(accountService.invalidateCache).toHaveBeenCalledTimes(1);
-      expect(analyticsService.invalidateCache).toHaveBeenCalledTimes(1);
       expect(message).toBe('Pago eliminado con éxito');
     });
 
@@ -471,12 +457,10 @@ describe('PaymentService', () => {
       expect(account.status).toBe(AccountStatus.ACTIVE);
     });
 
-    it('should not call invalidateCache if the transaction throws', async () => {
+    it('should propagate the transaction error', async () => {
       paymentRepo.findOne.mockRejectedValue(new Error('db down'));
 
       await expect(service.remove('payment-uuid-1')).rejects.toThrow('db down');
-      expect(accountService.invalidateCache).not.toHaveBeenCalled();
-      expect(analyticsService.invalidateCache).not.toHaveBeenCalled();
     });
   });
 
