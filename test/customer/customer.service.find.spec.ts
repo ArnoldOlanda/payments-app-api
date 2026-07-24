@@ -95,6 +95,93 @@ describe('CustomerService find methods — zone scoping', () => {
       ).toBe(true);
     });
 
+    it('should combine explicit zoneId with Prestamista assigned-zone scope (AND)', async () => {
+      (dataSource.manager as any) = stubManager(['zone-A']);
+
+      const qb: any = {
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        skip: jest.fn().mockReturnThis(),
+        take: jest.fn().mockReturnThis(),
+        getManyAndCount: jest.fn().mockResolvedValue([[], 0]),
+      };
+      customerRepo.createQueryBuilder.mockReturnValue(qb);
+
+      await service.findAll(
+        { page: 1, limit: 10, zoneId: 'zone-A' } as any,
+        prestamistaActor,
+      );
+
+      const andWhereCalls = qb.andWhere.mock.calls.map((c: any[]) => c[0]);
+      expect(
+        andWhereCalls.some((s: string) =>
+          s.includes('zone.id = :zoneId'),
+        ),
+      ).toBe(true);
+      expect(
+        andWhereCalls.some((s: string) =>
+          s.includes('zone.id IN (:...userZoneIds)'),
+        ),
+      ).toBe(true);
+
+      const explicitCall = qb.andWhere.mock.calls.find(
+        (c: any[]) => c[0] === 'zone.id = :zoneId',
+      );
+      expect(explicitCall?.[1]).toEqual({ zoneId: 'zone-A' });
+    });
+
+    it('should still apply assigned-zone scope for Prestamista with a foreign zoneId', async () => {
+      (dataSource.manager as any) = stubManager(['zone-A']);
+
+      const qb: any = {
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        skip: jest.fn().mockReturnThis(),
+        take: jest.fn().mockReturnThis(),
+        getManyAndCount: jest.fn().mockResolvedValue([[], 0]),
+      };
+      customerRepo.createQueryBuilder.mockReturnValue(qb);
+
+      await service.findAll(
+        { page: 1, limit: 10, zoneId: 'zone-foreign' } as any,
+        prestamistaActor,
+      );
+
+      const andWhereCalls = qb.andWhere.mock.calls.map((c: any[]) => c[0]);
+      expect(
+        andWhereCalls.some((s: string) =>
+          s.includes('zone.id IN (:...userZoneIds)'),
+        ),
+      ).toBe(true);
+      expect(
+        andWhereCalls.some((s: string) => s.includes('zone.id = :zoneId')),
+      ).toBe(true);
+    });
+
+    it('should apply only explicit zoneId for Admin (no scope)', async () => {
+      const qb: any = {
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        skip: jest.fn().mockReturnThis(),
+        take: jest.fn().mockReturnThis(),
+        getManyAndCount: jest.fn().mockResolvedValue([[{ id: 'c-1' }], 1]),
+      };
+      customerRepo.createQueryBuilder.mockReturnValue(qb);
+
+      await service.findAll(
+        { page: 1, limit: 10, zoneId: 'zone-X' } as any,
+        adminActor,
+      );
+
+      const andWhereCalls = qb.andWhere.mock.calls.map((c: any[]) => c[0]);
+      expect(
+        andWhereCalls.some((s: string) => s.includes('zone.id = :zoneId')),
+      ).toBe(true);
+      expect(andWhereCalls.some((s: string) => s.includes('userZoneIds'))).toBe(
+        false,
+      );
+    });
+
     it('should NOT inject zone filter for Admin', async () => {
       const qb: any = {
         leftJoinAndSelect: jest.fn().mockReturnThis(),

@@ -81,7 +81,9 @@ export class CustomerService {
 
     if (zoneId) {
       queryBuilder.andWhere('zone.id = :zoneId', { zoneId });
-    } else if (userZoneIds !== null) {
+    }
+
+    if (userZoneIds !== null) {
       queryBuilder.andWhere('zone.id IN (:...userZoneIds)', { userZoneIds });
     }
 
