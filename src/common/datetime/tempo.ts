@@ -157,3 +157,35 @@ export function weekEnd(d: Date, startOfWeekDay: number, tz: string): Date {
 export function format(d: Date, fmt: string, tz: string): string {
   return tempoFormat({ date: d, format: fmt, tz });
 }
+
+export type CalendarBoundary = 'start' | 'end';
+
+const CALENDAR_DAY_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+/**
+ * Parse a calendar-day string ('YYYY-MM-DD') as that calendar day observed
+ * in `tz`, returning the instant for the start (00:00:00.000) or end
+ * (23:59:59.999) of that day.
+ *
+ * Why not `new Date('YYYY-MM-DD')`: that constructor parses as UTC midnight,
+ * which can shift the calendar day for any actor east of UTC. We always
+ * thread TZ through the wrapper's primitives to keep boundaries consistent
+ * with `dayStart` / `dayEnd`.
+ */
+export function parseCalendarDayToInstant(
+  value: string,
+  tz: string,
+  boundary: CalendarBoundary,
+): Date {
+  const match = CALENDAR_DAY_RE.exec(value);
+  if (!match) {
+    throw new Error(`Invalid calendar day (expected YYYY-MM-DD): ${value}`);
+  }
+  const year = parseInt(match[1], 10);
+  const month = parseInt(match[2], 10);
+  const day = parseInt(match[3], 10);
+  // Noon dodges the DST midnight ambiguity; the wrapper's `dayStart` /
+  // `dayEnd` re-derives the boundary from this anchor in `tz`.
+  const noon = new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
+  return boundary === 'start' ? dayStart(noon, tz) : dayEnd(noon, tz);
+}

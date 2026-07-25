@@ -1,5 +1,7 @@
 import { Controller, Get, Query, Req, Res } from '@nestjs/common';
 import { ReportService } from './report.service';
+import { CollectionsReportService } from './collections-report.service';
+import { CollectionsReportQueryDto } from './dto/collections-report-query.dto';
 import { Request, Response } from 'express';
 import { Auth } from 'src/auth/decorators/auth.decorator';
 import { ValidRole } from 'src/auth/enums/validRoles.enum';
@@ -7,7 +9,10 @@ import { CurrentTimezone } from 'src/auth/decorators/current-timezone.decorator'
 
 @Controller('report')
 export class ReportController {
-  constructor(private readonly reportService: ReportService) {}
+  constructor(
+    private readonly reportService: ReportService,
+    private readonly collectionsReportService: CollectionsReportService,
+  ) {}
 
   @Get('/ficha-pagos')
   @Auth(ValidRole.ADMIN)
@@ -23,5 +28,14 @@ export class ReportController {
     pdfDoc.info.Title = 'Ficha de Pagos';
     pdfDoc.pipe(response);
     pdfDoc.end();
+  }
+
+  @Get('/collections')
+  @Auth(ValidRole.ADMIN)
+  getCollectionsReport(
+    @Query() query: CollectionsReportQueryDto,
+    @CurrentTimezone() tz: string,
+  ) {
+    return this.collectionsReportService.findAll(query, tz);
   }
 }
