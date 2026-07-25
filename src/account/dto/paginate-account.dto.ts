@@ -6,14 +6,19 @@ import {
   IsUUID,
   Min,
 } from 'class-validator';
+import { Transform } from 'class-transformer';
 import { AccountStatus } from '../enums/account-status.enum';
 
 export class PaginateAccountDto {
   @IsOptional()
+  @Transform(({ value }) =>
+    Array.isArray(value) ? value : value !== undefined ? [value] : value,
+  )
   @IsEnum(AccountStatus, {
+    each: true,
     message: 'The valid values are active, finished, cancelled, overdue',
   })
-  status?: AccountStatus;
+  status?: AccountStatus[];
 
   @IsOptional()
   @IsUUID('4')

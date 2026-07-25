@@ -214,7 +214,7 @@ export class PaymentService {
       if (account.status === AccountStatus.FINISHED && newBalance > 0) {
         account.status = AccountStatus.ACTIVE;
       }
-      if (newBalance === 0 && account.status === AccountStatus.ACTIVE) {
+      if (newBalance === 0) {
         account.status = AccountStatus.FINISHED;
       }
 

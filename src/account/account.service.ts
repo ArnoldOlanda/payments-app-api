@@ -92,8 +92,8 @@ export class AccountService {
       .leftJoinAndSelect('account.customer', 'customer')
       .leftJoinAndSelect('customer.zone', 'zone');
 
-    if (status) {
-      query.where('account.status = :status', { status });
+    if (status && status.length > 0) {
+      query.where('account.status IN (:...statuses)', { statuses: status });
     }
 
     if (zoneId) {

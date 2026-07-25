@@ -68,7 +68,7 @@ The system MUST allow `ADMIN` or `PRESTAMISTA` to retrieve a single account by i
 
 ### Requirement: Account Listing with Pagination and Zone-Scope
 
-The system MUST list accounts paginated, filtered by zone for non-admin actors, and MUST cache the result keyed by actor and pagination input.
+The system MUST list accounts paginated, filtered by zone for non-admin actors, and MUST cache the result keyed by actor and pagination input. The optional `status` filter MUST accept one or more `AccountStatus` values and restrict the query to accounts whose status is in the supplied set.
 
 #### Scenario: Apply zone filter for Prestamista
 
@@ -93,6 +93,19 @@ The system MUST list accounts paginated, filtered by zone for non-admin actors, 
 - GIVEN the same actor and pagination input has been queried within the cache window
 - WHEN the same request is repeated
 - THEN the cached result is returned without hitting the database
+
+#### Scenario: Filter by multiple statuses
+
+- GIVEN accounts with mixed statuses (`active`, `overdue`, `finished`, `cancelled`)
+- WHEN `GET /account?status=active&status=overdue` is called
+- THEN the response data only includes accounts whose status is in the supplied set (`active`, `overdue`)
+- AND accounts with other statuses are excluded
+
+#### Scenario: Reject unknown status value
+
+- GIVEN any request
+- WHEN `GET /account?status=unknown` is called
+- THEN the response is `400 Bad Request` and the message lists the valid status values
 
 ### Requirement: Account Update — Only Amount and Due Date Are Mutable
 
@@ -239,6 +252,8 @@ The system MUST transition `status` automatically on mutation operations:
 - When a payment is updated or removed such that `remainingBalance > 0` and current status is `FINISHED` → `ACTIVE`.
 - When `account.update` recomputes `remainingBalance = 0` → `FINISHED`.
 - When `account.update` recomputes `remainingBalance > 0` and current status is `FINISHED` → `ACTIVE`.
+- When a payment (create or update) against an `OVERDUE` account makes `remainingBalance` reach `0` → `FINISHED`.
+- When a payment (create or update) against an `OVERDUE` account leaves `remainingBalance > 0` → status remains `OVERDUE` (no transition to `ACTIVE`). The daily cron would revert any such transition on its next run, so reactivating `OVERDUE` accounts from payment mutations is forbidden.
 
 #### Scenario: Payment that zeros the balance finishes the account
 
@@ -251,6 +266,24 @@ The system MUST transition `status` automatically on mutation operations:
 - GIVEN an account with `remainingBalance = 0` and `status = FINISHED`
 - WHEN the last payment is removed
 - THEN `remainingBalance > 0` and `status = ACTIVE`
+
+#### Scenario: Partial payment on overdue account keeps it overdue
+
+- GIVEN an account with `remainingBalance = 200` and `status = OVERDUE`
+- WHEN a payment of `50` is created
+- THEN `remainingBalance = 150` and `status = OVERDUE`
+
+#### Scenario: Full payment on overdue account finishes it
+
+- GIVEN an account with `remainingBalance = 200` and `status = OVERDUE`
+- WHEN a payment of `200` is created
+- THEN `remainingBalance = 0` and `status = FINISHED`
+
+#### Scenario: Edit a payment on overdue account down to balance zero finishes it
+
+- GIVEN an account with `remainingBalance = 200` and `status = OVERDUE` and one payment of `50`
+- WHEN the payment is updated to `amount = 200`
+- THEN `remainingBalance = 0` and `status = FINISHED`
 
 ### Requirement: Account Cron — Overdue Marking
 

@@ -268,6 +268,45 @@ describe('PaymentService', () => {
       expect(account.status).toBe(AccountStatus.FINISHED);
     });
 
+    it('should allow payment against an OVERDUE account and keep status OVERDUE on partial payment', async () => {
+      const account = buildAccount({
+        remainingBalance: 500,
+        status: AccountStatus.OVERDUE,
+      });
+      accountRepo.findOne.mockResolvedValue(account);
+
+      await service.create({ ...dto, amount: 100 }, adminActor);
+
+      expect(account.remainingBalance).toBe(400);
+      expect(account.status).toBe(AccountStatus.OVERDUE);
+    });
+
+    it('should allow payment against an OVERDUE account and finish it on full payment', async () => {
+      const account = buildAccount({
+        remainingBalance: 200,
+        status: AccountStatus.OVERDUE,
+      });
+      accountRepo.findOne.mockResolvedValue(account);
+
+      await service.create({ ...dto, amount: 200 }, adminActor);
+
+      expect(account.remainingBalance).toBe(0);
+      expect(account.status).toBe(AccountStatus.FINISHED);
+    });
+
+    it('should allow payment against a CANCELLED account without blocking (only FINISHED blocks)', async () => {
+      const account = buildAccount({
+        remainingBalance: 500,
+        status: AccountStatus.CANCELLED,
+      });
+      accountRepo.findOne.mockResolvedValue(account);
+
+      await service.create({ ...dto, amount: 100 }, adminActor);
+
+      expect(account.remainingBalance).toBe(400);
+      expect(account.status).toBe(AccountStatus.CANCELLED);
+    });
+
     it('should propagate the transaction error', async () => {
       accountRepo.findOne.mockRejectedValue(new Error('db down'));
 
@@ -382,6 +421,34 @@ describe('PaymentService', () => {
 
       expect(account.remainingBalance).toBe(50);
       expect(account.status).toBe(AccountStatus.ACTIVE);
+    });
+
+    it('should flip status to FINISHED when an OVERDUE account balance reaches 0 on update (regression)', async () => {
+      const account = buildAccount({
+        remainingBalance: 50,
+        status: AccountStatus.OVERDUE,
+      });
+      paymentRepo.findOne.mockResolvedValue(buildPayment({ amount: 50 }));
+      accountRepo.findOne.mockResolvedValue(account);
+
+      await service.update('payment-uuid-1', { amount: 100 });
+
+      expect(account.remainingBalance).toBe(0);
+      expect(account.status).toBe(AccountStatus.FINISHED);
+    });
+
+    it('should keep status OVERDUE when an OVERDUE account update leaves balance > 0', async () => {
+      const account = buildAccount({
+        remainingBalance: 200,
+        status: AccountStatus.OVERDUE,
+      });
+      paymentRepo.findOne.mockResolvedValue(buildPayment({ amount: 50 }));
+      accountRepo.findOne.mockResolvedValue(account);
+
+      await service.update('payment-uuid-1', { amount: 80 });
+
+      expect(account.remainingBalance).toBe(170);
+      expect(account.status).toBe(AccountStatus.OVERDUE);
     });
 
     it('should reject when accountId differs from the current payment account (no transfers)', async () => {
