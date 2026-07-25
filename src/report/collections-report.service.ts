@@ -28,8 +28,20 @@ export type CollectionsReportRow = {
   user: { id: string; name: string } | null;
 };
 
+export type CollectionsReportZoneTotal = {
+  zoneId: string | null;
+  zoneName: string;
+  totalCollected: number;
+  paymentCount: number;
+};
+
+export type CollectionsReportTotals = {
+  byZone: CollectionsReportZoneTotal[];
+};
+
 export type CollectionsReportResponse = {
   data: CollectionsReportRow[];
+  totals: CollectionsReportTotals;
   meta: {
     total: number;
     page: number;
@@ -68,7 +80,7 @@ export class CollectionsReportService {
       );
     }
 
-    const qb = this.paymentRepository
+    const dataQb = this.paymentRepository
       .createQueryBuilder('payment')
       .leftJoinAndSelect('payment.account', 'account')
       .leftJoinAndSelect('account.customer', 'customer')
@@ -87,17 +99,65 @@ export class CollectionsReportService {
       .take(limit);
 
     if (query.userId) {
-      qb.andWhere('payment.userId = :userId', { userId: query.userId });
+      dataQb.andWhere('payment.userId = :userId', { userId: query.userId });
     }
     if (query.zoneId) {
-      qb.andWhere('customer.zoneId = :zoneId', { zoneId: query.zoneId });
+      dataQb.andWhere('customer.zoneId = :zoneId', { zoneId: query.zoneId });
     }
 
-    const [rows, total] = await qb.getManyAndCount();
+    // Per-zone totals always span every zone in scope so the cards give the
+    // operator a full picture, even when drilling into one zone. The
+    // zoneId filter is intentionally NOT applied here.
+    const byZoneTotalsQb = this.paymentRepository
+      .createQueryBuilder('payment')
+      .leftJoin('payment.account', 'account')
+      .leftJoin('account.customer', 'customer')
+      .leftJoin('customer.zone', 'zone')
+      .select('zone.id', 'zoneId')
+      .addSelect("COALESCE(zone.name, 'Sin zona')", 'zoneName')
+      .addSelect('COALESCE(SUM(payment.amount), 0)', 'totalCollected')
+      .addSelect('COUNT(payment.id)', 'paymentCount')
+      .where('payment.date BETWEEN :from AND :to', {
+        from: fromInstant,
+        to: toInstant,
+      })
+      .andWhere('payment.deletedAt IS NULL')
+      .groupBy('zone.id')
+      .addGroupBy('zone.name')
+      .orderBy('"totalCollected"', 'DESC');
+
+    if (query.userId) {
+      byZoneTotalsQb.andWhere('payment.userId = :userId', {
+        userId: query.userId,
+      });
+    }
+
+    const [[rows, total], byZoneRows] = await Promise.all([
+      dataQb.getManyAndCount(),
+      byZoneTotalsQb.getRawMany() as Promise<
+        Array<{
+          zoneId: string | null;
+          zoneName: string;
+          totalCollected: string;
+          paymentCount: string;
+        }>
+      >,
+    ]);
+
     const totalPages = limit > 0 ? Math.ceil(total / limit) : 0;
 
     return {
-      data: rows.map((row) => this.toRow(row as unknown as Parameters<CollectionsReportService['toRow']>[0])),
+      data: rows.map((row) =>
+        this.toRow(row as unknown as Parameters<CollectionsReportService['toRow']>[0]),
+      ),
+      totals: {
+        byZone: byZoneRows.map((row) => ({
+          zoneId: row.zoneId,
+          zoneName: row.zoneName,
+          totalCollected: Number(row.totalCollected),
+          paymentCount: Number(row.paymentCount),
+        })),
+      },
       meta: {
         total,
         page,

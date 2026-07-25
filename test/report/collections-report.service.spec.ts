@@ -14,12 +14,34 @@ function buildQb() {
     where: jest.fn().mockReturnThis(),
     andWhere: jest.fn().mockReturnThis(),
     addSelect: jest.fn().mockReturnThis(),
+    select: jest.fn().mockReturnThis(),
+    groupBy: jest.fn().mockReturnThis(),
+    addGroupBy: jest.fn().mockReturnThis(),
     orderBy: jest.fn().mockReturnThis(),
     addOrderBy: jest.fn().mockReturnThis(),
     skip: jest.fn().mockReturnThis(),
     take: jest.fn().mockReturnThis(),
-    getManyAndCount: jest.fn().mockResolvedValue([[buildHydratedRow()], 1]),
   };
+  return qb;
+}
+
+function buildDataQb() {
+  const qb = buildQb();
+  qb.getManyAndCount = jest.fn().mockResolvedValue([[buildHydratedRow()], 1]);
+  return qb;
+}
+
+function buildByZoneQb(rows: Array<{
+  zoneId: string | null;
+  zoneName: string;
+  totalCollected: string;
+  paymentCount: string;
+}> = [
+  { zoneId: 'z-1', zoneName: 'Zone A', totalCollected: '100', paymentCount: '2' },
+  { zoneId: 'z-2', zoneName: 'Zone B', totalCollected: '50', paymentCount: '1' },
+]) {
+  const qb = buildQb();
+  qb.getRawMany = jest.fn().mockResolvedValue(rows);
   return qb;
 }
 
@@ -43,10 +65,16 @@ function buildHydratedRow() {
   };
 }
 
-async function buildService() {
-  const paymentQb = buildQb();
+async function buildService(opts: {
+  dataQb?: any;
+  byZoneQb?: any;
+} = {}) {
+  const dataQb = opts.dataQb ?? buildDataQb();
+  const byZoneQb = opts.byZoneQb ?? buildByZoneQb();
+
+  const qbs = [dataQb, byZoneQb];
   const paymentRepo = {
-    createQueryBuilder: jest.fn().mockReturnValue(paymentQb),
+    createQueryBuilder: jest.fn().mockImplementation(() => qbs.shift()),
   };
 
   const module: TestingModule = await Test.createTestingModule({
@@ -57,7 +85,11 @@ async function buildService() {
     ],
   }).compile();
 
-  return { service: module.get(CollectionsReportService), qb: paymentQb };
+  return {
+    service: module.get(CollectionsReportService),
+    dataQb,
+    byZoneQb,
+  };
 }
 
 const fixedNow = new Date('2026-07-25T12:00:00Z');
@@ -71,14 +103,14 @@ describe('CollectionsReportService', () => {
   });
 
   it('defaults the date range to today in the actor timezone when from/to are omitted', async () => {
-    const { service, qb } = await buildService();
+    const { service, dataQb } = await buildService();
 
     await service.findAll(
       { page: 1, limit: 10 },
       'America/Argentina/Buenos_Aires',
     );
 
-    const whereCall = qb.where.mock.calls.find(
+    const whereCall = dataQb.where.mock.calls.find(
       (c: unknown[]) =>
         typeof c[0] === 'string' && c[0].includes('payment.date BETWEEN'),
     );
@@ -91,14 +123,14 @@ describe('CollectionsReportService', () => {
   });
 
   it('honors from/to and resolves them as calendar days in the actor timezone', async () => {
-    const { service, qb } = await buildService();
+    const { service, dataQb } = await buildService();
 
     await service.findAll(
       { from: '2026-07-01', to: '2026-07-31', page: 1, limit: 10 },
       'Asia/Tokyo',
     );
 
-    const whereCall = qb.where.mock.calls.find(
+    const whereCall = dataQb.where.mock.calls.find(
       (c: unknown[]) =>
         typeof c[0] === 'string' && c[0].includes('payment.date BETWEEN'),
     );
@@ -127,14 +159,14 @@ describe('CollectionsReportService', () => {
   });
 
   it('adds payment.userId filter when userId is provided', async () => {
-    const { service, qb } = await buildService();
+    const { service, dataQb } = await buildService();
 
     await service.findAll(
       { userId: '5e1c1f6b-7b3d-4a2b-9a8c-1f3b6c8c2f3a', page: 1, limit: 10 },
       'UTC',
     );
 
-    const userIdCall = qb.andWhere.mock.calls.find(
+    const userIdCall = dataQb.andWhere.mock.calls.find(
       (c: unknown[]) =>
         typeof c[0] === 'string' && c[0].includes('payment.userId'),
     );
@@ -145,14 +177,14 @@ describe('CollectionsReportService', () => {
   });
 
   it('adds customer.zoneId filter when zoneId is provided', async () => {
-    const { service, qb } = await buildService();
+    const { service, dataQb } = await buildService();
 
     await service.findAll(
       { zoneId: '5e1c1f6b-7b3d-4a2b-9a8c-1f3b6c8c2f3b', page: 1, limit: 10 },
       'UTC',
     );
 
-    const zoneCall = qb.andWhere.mock.calls.find(
+    const zoneCall = dataQb.andWhere.mock.calls.find(
       (c: unknown[]) => typeof c[0] === 'string' && c[0].includes('zoneId'),
     );
     expect(zoneCall).toBeDefined();
@@ -162,11 +194,11 @@ describe('CollectionsReportService', () => {
   });
 
   it('excludes soft-deleted payments unconditionally', async () => {
-    const { service, qb } = await buildService();
+    const { service, dataQb } = await buildService();
 
     await service.findAll({ page: 1, limit: 10 }, 'UTC');
 
-    const deletedAtCall = qb.andWhere.mock.calls.find(
+    const deletedAtCall = dataQb.andWhere.mock.calls.find(
       (c: unknown[]) =>
         typeof c[0] === 'string' && c[0].includes('deletedAt IS NULL'),
     );
@@ -174,49 +206,39 @@ describe('CollectionsReportService', () => {
   });
 
   it('orders by payment.date DESC, payment.createdAt DESC, payment.id DESC', async () => {
-    const { service, qb } = await buildService();
+    const { service, dataQb } = await buildService();
 
     await service.findAll({ page: 1, limit: 10 }, 'UTC');
 
-    expect(qb.orderBy).toHaveBeenCalledWith('payment.date', 'DESC');
-    expect(qb.addOrderBy).toHaveBeenCalledWith('payment.createdAt', 'DESC');
-    expect(qb.addOrderBy).toHaveBeenCalledWith('payment.id', 'DESC');
+    expect(dataQb.orderBy).toHaveBeenCalledWith('payment.date', 'DESC');
+    expect(dataQb.addOrderBy).toHaveBeenCalledWith('payment.createdAt', 'DESC');
+    expect(dataQb.addOrderBy).toHaveBeenCalledWith('payment.id', 'DESC');
   });
 
   it('applies skip and take from page/limit (1-indexed)', async () => {
-    const { service, qb } = await buildService();
+    const { service, dataQb } = await buildService();
 
     await service.findAll({ page: 3, limit: 25 }, 'UTC');
 
-    expect(qb.skip).toHaveBeenCalledWith(50);
-    expect(qb.take).toHaveBeenCalledWith(25);
+    expect(dataQb.skip).toHaveBeenCalledWith(50);
+    expect(dataQb.take).toHaveBeenCalledWith(25);
   });
 
   it('caps limit at 200', async () => {
-    const { service, qb } = await buildService();
+    const { service, dataQb } = await buildService();
 
     await service.findAll({ page: 1, limit: 500 }, 'UTC');
 
-    expect(qb.take).toHaveBeenCalledWith(200);
+    expect(dataQb.take).toHaveBeenCalledWith(200);
   });
 
   it('returns the result envelope with meta derived from rows.length and skip/take', async () => {
-    const qb = buildQb();
-    qb.getManyAndCount.mockResolvedValue([
+    const dataQb = buildDataQb();
+    dataQb.getManyAndCount.mockResolvedValue([
       [buildHydratedRow(), { ...buildHydratedRow(), id: 'p-2' }],
       42,
     ]);
-    const module = await Test.createTestingModule({
-      providers: [
-        CollectionsReportService,
-        {
-          provide: getRepositoryToken(Payment),
-          useValue: { createQueryBuilder: () => qb },
-        },
-        { provide: DataSource, useValue: { manager: {} } },
-      ],
-    }).compile();
-    const service = module.get(CollectionsReportService);
+    const { service } = await buildService({ dataQb });
 
     const result = await service.findAll({ page: 2, limit: 10 }, 'UTC');
 
@@ -231,19 +253,9 @@ describe('CollectionsReportService', () => {
   });
 
   it('uses page=1 as the canonical currentPage even on an empty result', async () => {
-    const qb = buildQb();
-    qb.getManyAndCount.mockResolvedValue([[], 0]);
-    const module = await Test.createTestingModule({
-      providers: [
-        CollectionsReportService,
-        {
-          provide: getRepositoryToken(Payment),
-          useValue: { createQueryBuilder: () => qb },
-        },
-        { provide: DataSource, useValue: { manager: {} } },
-      ],
-    }).compile();
-    const service = module.get(CollectionsReportService);
+    const dataQb = buildDataQb();
+    dataQb.getManyAndCount.mockResolvedValue([[], 0]);
+    const { service } = await buildService({ dataQb });
 
     const result = await service.findAll({ page: 7, limit: 10 }, 'UTC');
 
@@ -259,23 +271,23 @@ describe('CollectionsReportService', () => {
     // ambiguous `payment_id` reference in Postgres. Fix: always use
     // `leftJoinAndSelect` for relations we project; let TypeORM auto-select
     // the root columns and only `addSelect` the `select:false` fields.
-    const { service, qb } = await buildService();
+    const { service, dataQb } = await buildService();
 
     await service.findAll({ page: 1, limit: 10 }, 'UTC');
 
-    expect(qb.leftJoin).not.toHaveBeenCalled();
-    expect(qb.leftJoinAndSelect).toHaveBeenCalledWith('payment.account', 'account');
-    expect(qb.leftJoinAndSelect).toHaveBeenCalledWith('account.customer', 'customer');
-    expect(qb.leftJoinAndSelect).toHaveBeenCalledWith('customer.zone', 'zone');
-    expect(qb.leftJoinAndSelect).toHaveBeenCalledWith('payment.user', 'user');
+    expect(dataQb.leftJoin).not.toHaveBeenCalled();
+    expect(dataQb.leftJoinAndSelect).toHaveBeenCalledWith('payment.account', 'account');
+    expect(dataQb.leftJoinAndSelect).toHaveBeenCalledWith('account.customer', 'customer');
+    expect(dataQb.leftJoinAndSelect).toHaveBeenCalledWith('customer.zone', 'zone');
+    expect(dataQb.leftJoinAndSelect).toHaveBeenCalledWith('payment.user', 'user');
   });
 
   it('addSelect is called only for the select:false payment.createdAt field', async () => {
-    const { service, qb } = await buildService();
+    const { service, dataQb } = await buildService();
 
     await service.findAll({ page: 1, limit: 10 }, 'UTC');
 
-    const addSelectCalls = qb.addSelect.mock.calls;
+    const addSelectCalls = dataQb.addSelect.mock.calls;
     expect(addSelectCalls).toHaveLength(1);
     const arg = addSelectCalls[0][0];
     const flattened = Array.isArray(arg) ? arg : [arg];
@@ -300,16 +312,9 @@ describe('CollectionsReportService', () => {
       },
       user: { id: 'u-1', name: 'Cobrador Uno' },
     };
-    const qb = buildQb();
-    qb.getManyAndCount.mockResolvedValue([[hydratedRow], 1]);
-    const module = await Test.createTestingModule({
-      providers: [
-        CollectionsReportService,
-        { provide: getRepositoryToken(Payment), useValue: { createQueryBuilder: () => qb } },
-        { provide: DataSource, useValue: { manager: {} } },
-      ],
-    }).compile();
-    const service = module.get(CollectionsReportService);
+    const dataQb = buildDataQb();
+    dataQb.getManyAndCount.mockResolvedValue([[hydratedRow], 1]);
+    const { service } = await buildService({ dataQb });
 
     const result = await service.findAll({ page: 1, limit: 10 }, 'UTC');
 
@@ -352,20 +357,122 @@ describe('CollectionsReportService', () => {
       },
       user: null,
     };
-    const qb = buildQb();
-    qb.getManyAndCount.mockResolvedValue([[hydratedRow], 1]);
-    const module = await Test.createTestingModule({
-      providers: [
-        CollectionsReportService,
-        { provide: getRepositoryToken(Payment), useValue: { createQueryBuilder: () => qb } },
-        { provide: DataSource, useValue: { manager: {} } },
-      ],
-    }).compile();
-    const service = module.get(CollectionsReportService);
+    const dataQb = buildDataQb();
+    dataQb.getManyAndCount.mockResolvedValue([[hydratedRow], 1]);
+    const { service } = await buildService({ dataQb });
 
     const result = await service.findAll({ page: 1, limit: 10 }, 'UTC');
 
     expect(result.data[0].account.customer.zone).toBeNull();
     expect(result.data[0].user).toBeNull();
+  });
+
+  describe('totals', () => {
+    it('returns byZone totals in the response', async () => {
+      const byZoneQb = buildByZoneQb([
+        { zoneId: 'z-1', zoneName: 'Zone A', totalCollected: '750', paymentCount: '4' },
+        { zoneId: 'z-2', zoneName: 'Zone B', totalCollected: '500', paymentCount: '3' },
+      ]);
+      const { service } = await buildService({ byZoneQb });
+
+      const result = await service.findAll({ page: 1, limit: 10 }, 'UTC');
+
+      expect(result.totals).toEqual({
+        byZone: [
+          { zoneId: 'z-1', zoneName: 'Zone A', totalCollected: 750, paymentCount: 4 },
+          { zoneId: 'z-2', zoneName: 'Zone B', totalCollected: 500, paymentCount: 3 },
+        ],
+      });
+    });
+
+    it('byZone respects the from/to range', async () => {
+      const { service, byZoneQb } = await buildService();
+
+      await service.findAll(
+        { from: '2026-07-01', to: '2026-07-31', page: 1, limit: 10 },
+        'Asia/Tokyo',
+      );
+
+      const byZoneWhere = byZoneQb.where.mock.calls.find(
+        (c: unknown[]) =>
+          typeof c[0] === 'string' && c[0].includes('payment.date BETWEEN'),
+      );
+      expect(byZoneWhere).toBeDefined();
+    });
+
+    it('byZone respects the userId filter (so cobrador drill-down works)', async () => {
+      const { service, byZoneQb } = await buildService();
+
+      await service.findAll(
+        {
+          userId: '5e1c1f6b-7b3d-4a2b-9a8c-1f3b6c8c2f3a',
+          page: 1,
+          limit: 10,
+        },
+        'UTC',
+      );
+
+      const byZoneUserIdCall = byZoneQb.andWhere.mock.calls.find(
+        (c: unknown[]) =>
+          typeof c[0] === 'string' && c[0].includes('payment.userId'),
+      );
+      expect(byZoneUserIdCall).toBeDefined();
+    });
+
+    it('byZone IGNORES the zoneId filter so the cards always show the full picture', async () => {
+      const { service, byZoneQb, dataQb } = await buildService();
+
+      await service.findAll(
+        { zoneId: '5e1c1f6b-7b3d-4a2b-9a8c-1f3b6c8c2f3b', page: 1, limit: 10 },
+        'UTC',
+      );
+
+      // Only the data query receives the zone filter; byZone keeps showing
+      // every zone so the operator can still compare zones when drilling
+      // into a single one.
+      const dataZoneCall = dataQb.andWhere.mock.calls.find(
+        (c: unknown[]) => typeof c[0] === 'string' && c[0].includes('zoneId'),
+      );
+      const byZoneZoneCall = byZoneQb.andWhere.mock.calls.find(
+        (c: unknown[]) => typeof c[0] === 'string' && c[0].includes('zoneId'),
+      );
+
+      expect(dataZoneCall).toBeDefined();
+      expect(byZoneZoneCall).toBeUndefined();
+    });
+
+    it('byZone always excludes soft-deleted payments', async () => {
+      const { service, byZoneQb } = await buildService();
+
+      await service.findAll({ page: 1, limit: 10 }, 'UTC');
+
+      const byZoneDeletedCall = byZoneQb.andWhere.mock.calls.find(
+        (c: unknown[]) =>
+          typeof c[0] === 'string' && c[0].includes('deletedAt IS NULL'),
+      );
+      expect(byZoneDeletedCall).toBeDefined();
+    });
+
+    it('byZone is empty when no payments match', async () => {
+      const byZoneQb = buildByZoneQb([]);
+      const { service } = await buildService({ byZoneQb });
+
+      const result = await service.findAll({ page: 1, limit: 10 }, 'UTC');
+
+      expect(result.totals).toEqual({ byZone: [] });
+    });
+
+    it('byZone rows for customers without a zone collapse to a single Sin zona entry', async () => {
+      const byZoneQb = buildByZoneQb([
+        { zoneId: null, zoneName: 'Sin zona', totalCollected: '100', paymentCount: '2' },
+      ]);
+      const { service } = await buildService({ byZoneQb });
+
+      const result = await service.findAll({ page: 1, limit: 10 }, 'UTC');
+
+      expect(result.totals.byZone).toEqual([
+        { zoneId: null, zoneName: 'Sin zona', totalCollected: 100, paymentCount: 2 },
+      ]);
+    });
   });
 });

@@ -1,10 +1,14 @@
-# Delta for Collections Report
+# Collections Report Specification
 
-Este delta introduce el bounded context `collections-report`. Cuando se
-archive el change, el archivo se promovera como spec canonica en
-`openspec/specs/collections-report/spec.md`.
+## Purpose
 
-## ADDED Requirements
+The `collections-report` bounded context exposes a paginated, filterable
+report of payments collected in a given date or date range. The report
+is restricted to `ADMIN` actors and powers the operator's screen at
+`/report/collections`. It also returns per-zone aggregates so the
+operator can compare zones while drilling into a single one.
+
+## Requirements
 
 ### Requirement: Collections Report Endpoint
 
@@ -21,7 +25,7 @@ restricted to `ADMIN` actors.
 - WHEN `GET /report/collections` is called with no query params
 - THEN the query uses `from = 2026-07-25T00:00:00-03:00` and
   `to = 2026-07-25T23:59:59.999-03:00`
-- AND the response is `200 OK` with `{ data: [...], meta: {...} }`
+- AND the response is `200 OK` with `{ data, totals, meta }`
 
 #### Scenario: Filter by date range
 
@@ -86,22 +90,60 @@ restricted to `ADMIN` actors.
 
 The system MUST return each row with the fields required by the UI:
 
-`id`, `paymentDate` (date portion in actor TZ), `registeredAt` (full ISO
-timestamp), `loanAmount`, `paidAmount`, `zone` `{ id, name }`,
-`customer` `{ id, name, lastName }`, `user` `{ id, name } | null`.
+`id`, `date` (ISO timestamp), `registeredAt` (ISO timestamp), `amount`,
+`account: { id, amount, customer: { id, name, lastName, zone: { id, name } | null } }`,
+`user: { id, name } | null`.
 
 #### Scenario: Row includes required fields
 
 - GIVEN a payment with `id=p-1`
 - WHEN the response is returned
-- THEN the row contains `id, paymentDate, registeredAt, loanAmount,
-  paidAmount, zone, customer, user`
+- THEN the row contains `id, date, registeredAt, amount, account.id,
+  account.amount, account.customer.id, account.customer.name,
+  account.customer.lastName, account.customer.zone, user`
 
 #### Scenario: Payments with no registering user show null user
 
 - GIVEN a payment `p-1` with `userId = null` (legacy data)
 - WHEN the response is returned
 - THEN the row has `user: null`
+
+### Requirement: Collections Report Totals by Zone
+
+The response MUST include a `totals.byZone` array computed from the same
+date range and `userId` filter as the rows, but independent of the
+`zoneId` filter so the operator always sees the full picture.
+
+Each entry MUST be `{ zoneId, zoneName, totalCollected, paymentCount }`,
+sorted by `totalCollected` DESC. Rows whose customer has no zone
+collapse into a single entry with `zoneId: null` and
+`zoneName: "Sin zona"`.
+
+#### Scenario: byZone reflects the active date range and userId filter
+
+- GIVEN the same filters that drive `data[]`
+- WHEN the response is returned
+- THEN `totals.byZone` reflects those filters
+
+#### Scenario: byZone ignores the zoneId filter
+
+- GIVEN `zoneId = z-1` is selected
+- WHEN the response is returned
+- THEN `totals.byZone` still contains every zone, not only `z-1`
+- AND the operator can compare zones while drilling into one
+
+#### Scenario: byZone excludes soft-deleted payments
+
+- GIVEN soft-deleted payments in the period
+- WHEN the response is returned
+- THEN they do not contribute to `totalCollected` or `paymentCount`
+  in any `byZone` entry
+
+#### Scenario: byZone is empty when no payments match
+
+- GIVEN no payments in the active window
+- WHEN the response is returned
+- THEN `totals.byZone = []`
 
 ### Requirement: Collections Report Date Boundaries
 
@@ -120,8 +162,3 @@ timezone, NOT as UTC instants parsed by `new Date('YYYY-MM-DD')`.
 - AND the Tokyo actor receives the row
 - AND a request with timezone `UTC` and `from=2026-07-26&to=2026-07-26`
   also receives the row
-
-## MODIFIED Requirements
-
-None. The bounded context `collections-report` is new; no existing
-canonical spec is altered by this delta.
