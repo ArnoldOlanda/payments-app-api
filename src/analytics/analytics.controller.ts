@@ -68,6 +68,7 @@ export class AnalyticsController {
       query.from,
       query.to,
       actor,
+      query.userId,
     );
   }
 }

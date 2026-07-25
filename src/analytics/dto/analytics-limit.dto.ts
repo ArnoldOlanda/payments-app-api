@@ -8,6 +8,11 @@ export class AnalyticsLimitDto {
   @IsUUID('4')
   zoneId?: string;
 
+  @ApiPropertyOptional({ format: 'uuid', description: 'Restrict results to payments registered by a specific user; if omitted, results span every cobrador in the resolved zone scope.' })
+  @IsOptional()
+  @IsUUID('4')
+  userId?: string;
+
   @ApiPropertyOptional({ default: 10, minimum: 1 })
   @IsOptional()
   @IsInt()

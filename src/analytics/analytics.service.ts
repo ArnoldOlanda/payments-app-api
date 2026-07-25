@@ -234,6 +234,7 @@ export class AnalyticsService {
     from: Date | undefined,
     to: Date | undefined,
     actor: Actor,
+    userId?: string,
   ) {
     const scope = await this.resolveScope(actor, zoneId);
 
@@ -252,6 +253,10 @@ export class AnalyticsService {
     }
 
     this.applyZoneScope(qb, 'customer', scope);
+
+    if (userId) {
+      qb.andWhere('payment.userId = :userId', { userId });
+    }
 
     return qb.getMany();
   }

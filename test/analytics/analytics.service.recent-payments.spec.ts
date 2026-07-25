@@ -143,4 +143,42 @@ describe('AnalyticsService.getRecentPayments()', () => {
       ),
     ).rejects.toThrow(ForbiddenException);
   });
+
+  it('adds payment.userId filter when userId is provided', async () => {
+    const qb = buildQb();
+    paymentRepo.createQueryBuilder.mockReturnValue(qb);
+
+    await service.getRecentPayments(
+      undefined,
+      10,
+      undefined,
+      undefined,
+      adminActor,
+      'user-target',
+    );
+
+    expect(qb.andWhere).toHaveBeenCalledWith(
+      'payment.userId = :userId',
+      { userId: 'user-target' },
+    );
+  });
+
+  it('does not add payment.userId filter when userId is omitted', async () => {
+    const qb = buildQb();
+    paymentRepo.createQueryBuilder.mockReturnValue(qb);
+
+    await service.getRecentPayments(
+      undefined,
+      10,
+      undefined,
+      undefined,
+      adminActor,
+    );
+
+    const userIdCalls = qb.andWhere.mock.calls.filter(
+      (call: unknown[]) =>
+        typeof call[0] === 'string' && call[0].includes('payment.userId'),
+    );
+    expect(userIdCalls).toHaveLength(0);
+  });
 });
