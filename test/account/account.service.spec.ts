@@ -258,6 +258,68 @@ describe('AccountService', () => {
       );
     });
 
+    it('should apply collectibleToday before pagination using Lima day boundaries', async () => {
+      jest.useFakeTimers().setSystemTime(new Date('2025-01-16T03:00:00.000Z'));
+      const qb: any = {
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        skip: jest.fn().mockReturnThis(),
+        take: jest.fn().mockReturnThis(),
+        getManyAndCount: jest.fn().mockResolvedValue([[{ id: 'a-1' }], 1]),
+      };
+      accountRepo.createQueryBuilder.mockReturnValue(qb);
+
+      try {
+        await service.findAll(
+          { page: 1, limit: 10, collectibleToday: true } as any,
+          adminActor,
+        );
+      } finally {
+        jest.useRealTimers();
+      }
+
+      const eligibilityCall = qb.andWhere.mock.calls.find(
+        (call: unknown[]) =>
+          typeof call[0] === 'string' && call[0].includes('daily_payment'),
+      );
+      expect(eligibilityCall).toBeDefined();
+      expect(eligibilityCall![0]).toContain('NOT EXISTS');
+      expect(eligibilityCall![0]).toContain(
+        'daily_payment."deletedAt" IS NULL',
+      );
+      expect(eligibilityCall![1].todayStart.toISOString()).toBe(
+        '2025-01-15T05:00:00.000Z',
+      );
+      expect(eligibilityCall![1].todayEnd.toISOString()).toBe(
+        '2025-01-16T04:59:59.999Z',
+      );
+      expect(qb.getManyAndCount).toHaveBeenCalledTimes(1);
+    });
+
+    it('should preserve existing account query behavior when collectibleToday is omitted', async () => {
+      const qb: any = {
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        skip: jest.fn().mockReturnThis(),
+        take: jest.fn().mockReturnThis(),
+        getManyAndCount: jest.fn().mockResolvedValue([[], 0]),
+      };
+      accountRepo.createQueryBuilder.mockReturnValue(qb);
+
+      await service.findAll({ page: 1, limit: 10 } as any, adminActor);
+
+      expect(
+        qb.andWhere.mock.calls.some(
+          (call: unknown[]) =>
+            typeof call[0] === 'string' && call[0].includes('daily_payment'),
+        ),
+      ).toBe(false);
+    });
+
     it('should short-circuit to empty result for Prestamista with no zones', async () => {
       (dataSource.manager as any) = stubManager([]);
 

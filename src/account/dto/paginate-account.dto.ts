@@ -1,4 +1,5 @@
 import {
+  IsBoolean,
   IsEnum,
   IsNumber,
   IsOptional,
@@ -7,6 +8,7 @@ import {
   Min,
 } from 'class-validator';
 import { Transform } from 'class-transformer';
+import { ToBoolean } from 'src/common/decorators/to-boolean.decorator';
 import { AccountStatus } from '../enums/account-status.enum';
 
 export class PaginateAccountDto {
@@ -33,6 +35,11 @@ export class PaginateAccountDto {
   @IsNumber()
   @Min(1)
   limit?: number = 10;
+
+  @IsOptional()
+  @ToBoolean()
+  @IsBoolean()
+  collectibleToday?: boolean;
 
   //TODO: Add more filters
   @IsOptional()

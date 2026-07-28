@@ -1,5 +1,12 @@
-import { Type } from 'class-transformer';
-import { IsBoolean, IsNumber, IsOptional, IsUUID, Min, IsString } from 'class-validator';
+import {
+  IsBoolean,
+  IsNumber,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Min,
+} from 'class-validator';
+import { ToBoolean } from 'src/common/decorators/to-boolean.decorator';
 
 export class PaginationDto {
   @IsOptional()
@@ -13,8 +20,8 @@ export class PaginationDto {
   limit?: number = 10;
 
   @IsOptional()
+  @ToBoolean()
   @IsBoolean()
-  @Type(() => Boolean)
   all?: boolean;
 
   @IsOptional()

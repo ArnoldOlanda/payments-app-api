@@ -18,6 +18,9 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { ValidRole } from 'src/auth/enums/validRoles.enum';
 import { Actor } from 'src/auth/types/actor.type';
 import { loadUserZoneIds } from 'src/auth/helpers/zone-scope.helper';
+import { dayEnd, dayStart } from 'src/common/datetime/tempo';
+
+const ACCOUNT_BUSINESS_TIMEZONE = 'America/Lima';
 
 const isAdmin = (user: Actor): boolean => user.role === ValidRole.ADMIN;
 
@@ -71,7 +74,7 @@ export class AccountService {
   }
 
   async findAll(paginationDto: PaginateAccountDto, actor: Actor) {
-    const { zoneId, status, page, limit } = paginationDto;
+    const { zoneId, status, page, limit, collectibleToday } = paginationDto;
     const skip = (page - 1) * limit;
 
     if (!isAdmin(actor)) {
@@ -106,6 +109,22 @@ export class AccountService {
         actor.id,
       );
       query.andWhere('zone.id IN (:...userZoneIds)', { userZoneIds });
+    }
+
+    if (collectibleToday) {
+      query.andWhere(
+        `NOT EXISTS (
+          SELECT 1
+          FROM "payment" daily_payment
+          WHERE daily_payment."accountId" = account.id
+            AND daily_payment."deletedAt" IS NULL
+            AND daily_payment.date BETWEEN :todayStart AND :todayEnd
+        )`,
+        {
+          todayStart: dayStart(new Date(), ACCOUNT_BUSINESS_TIMEZONE),
+          todayEnd: dayEnd(new Date(), ACCOUNT_BUSINESS_TIMEZONE),
+        },
+      );
     }
 
     query.orderBy('account.createdAt', 'DESC');

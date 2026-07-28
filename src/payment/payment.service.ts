@@ -1,11 +1,20 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import {
+  Between,
+  DataSource,
+  EntityManager,
+  FindOptionsWhere,
+  IsNull,
+  Not,
+  Repository,
+} from 'typeorm';
 
 import { Account } from 'src/account/entities/account.entity';
 import { AccountStatus } from 'src/account/enums/account-status.enum';
@@ -18,6 +27,9 @@ import { Payment } from './entities/payment.entity';
 import { ValidRole } from 'src/auth/enums/validRoles.enum';
 import { Actor } from 'src/auth/types/actor.type';
 import { loadUserZoneIds } from 'src/auth/helpers/zone-scope.helper';
+import { dayEnd, dayStart } from 'src/common/datetime/tempo';
+
+const PAYMENT_BUSINESS_TIMEZONE = 'America/Lima';
 
 const isAdmin = (user: Actor): boolean => user.role === ValidRole.ADMIN;
 
@@ -32,6 +44,33 @@ export class PaymentService {
     private readonly analyticsService: AnalyticsService,
     private readonly dataSource: DataSource,
   ) {}
+
+  private async assertPaymentDayAvailable(
+    manager: EntityManager,
+    accountId: string,
+    paymentDate: Date,
+    excludedPaymentId?: string,
+  ): Promise<void> {
+    const where: FindOptionsWhere<Payment> = {
+      accountId,
+      date: Between(
+        dayStart(paymentDate, PAYMENT_BUSINESS_TIMEZONE),
+        dayEnd(paymentDate, PAYMENT_BUSINESS_TIMEZONE),
+      ),
+      deletedAt: IsNull(),
+    };
+
+    if (excludedPaymentId) {
+      where.id = Not(excludedPaymentId);
+    }
+
+    const paymentExists = await manager.exists(Payment, { where });
+    if (paymentExists) {
+      throw new ConflictException(
+        'Ya existe un pago registrado para esta cuenta en la fecha seleccionada',
+      );
+    }
+  }
 
   async create(createPaymentDto: CreatePaymentDto, actor: Actor) {
     const savedPayment = await this.dataSource.transaction(async (manager) => {
@@ -67,6 +106,12 @@ export class PaymentService {
           );
         }
       }
+
+      await this.assertPaymentDayAvailable(
+        manager,
+        account.id,
+        createPaymentDto.date,
+      );
 
       if (account.status === AccountStatus.FINISHED) {
         throw new BadRequestException(
@@ -205,6 +250,15 @@ export class PaymentService {
       });
       if (!account) {
         throw new NotFoundException(`Cuenta no encontrada`);
+      }
+
+      if (updatePaymentDto.date !== undefined) {
+        await this.assertPaymentDayAvailable(
+          manager,
+          account.id,
+          updatePaymentDto.date,
+          payment.id,
+        );
       }
 
       const previousAppliedAmount = payment.appliedAmount ?? payment.amount;

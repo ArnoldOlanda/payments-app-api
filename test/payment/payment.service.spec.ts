@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
@@ -22,11 +23,10 @@ describe('PaymentService', () => {
   let service: PaymentService;
   let accountRepo: jest.Mocked<any>;
   let paymentRepo: jest.Mocked<any>;
-  let accountService: jest.Mocked<AccountService>;
-  let analyticsService: jest.Mocked<AnalyticsService>;
   let dataSource: jest.Mocked<DataSource>;
   let mockManager: {
     findOne: jest.Mock;
+    exists: jest.Mock;
     create: jest.Mock;
     save: jest.Mock;
     softDelete: jest.Mock;
@@ -63,6 +63,7 @@ describe('PaymentService', () => {
         }
         return Promise.resolve(null);
       }),
+      exists: jest.fn().mockResolvedValue(false),
       create: jest.fn((_entity, data) => ({ ...data })),
       save: jest.fn(async (data) => data),
       softDelete: jest.fn(async () => ({ affected: 1 })),
@@ -91,6 +92,7 @@ describe('PaymentService', () => {
   beforeEach(async () => {
     mockManager = {
       findOne: jest.fn(),
+      exists: jest.fn().mockResolvedValue(false),
       create: jest.fn((_entity, data) => ({ ...data })),
       save: jest.fn(async (data) => data),
       softDelete: jest.fn(async () => ({ affected: 1 })),
@@ -137,8 +139,6 @@ describe('PaymentService', () => {
     service = module.get<PaymentService>(PaymentService);
     accountRepo = module.get(getRepositoryToken(Account));
     paymentRepo = module.get(getRepositoryToken(Payment));
-    accountService = module.get(AccountService);
-    analyticsService = module.get(AnalyticsService);
     dataSource = module.get(DataSource);
 
     mockManager.findOne.mockImplementation((entity: any, options: any) => {
@@ -181,6 +181,61 @@ describe('PaymentService', () => {
 
       await expect(service.create(dto, adminActor)).rejects.toThrow(
         NotFoundException,
+      );
+    });
+
+    it('should reject a second live payment for the same account and Lima day', async () => {
+      const account = buildAccount({ remainingBalance: 1000 });
+      accountRepo.findOne.mockResolvedValue(account);
+      mockManager.exists.mockResolvedValue(true);
+
+      await expect(service.create(dto, adminActor)).rejects.toThrow(
+        ConflictException,
+      );
+
+      expect(account.remainingBalance).toBe(1000);
+      expect(mockManager.save).not.toHaveBeenCalled();
+    });
+
+    it('should compare payment dates using America/Lima day boundaries', async () => {
+      accountRepo.findOne.mockResolvedValue(buildAccount());
+
+      await service.create(
+        { ...dto, date: new Date('2025-01-16T03:00:00.000Z') },
+        adminActor,
+      );
+
+      const existsOptions = mockManager.exists.mock.calls[0][1] as any;
+      const [from, to] = existsOptions.where.date._value as Date[];
+      expect(from.toISOString()).toBe('2025-01-15T05:00:00.000Z');
+      expect(to.toISOString()).toBe('2025-01-16T04:59:59.999Z');
+      expect(existsOptions.where.deletedAt._type).toBe('isNull');
+    });
+
+    it('should use a distinct range for the next America/Lima calendar day', async () => {
+      accountRepo.findOne.mockResolvedValue(buildAccount());
+
+      await service.create(
+        { ...dto, date: new Date('2025-01-16T05:00:00.000Z') },
+        adminActor,
+      );
+
+      const existsOptions = mockManager.exists.mock.calls[0][1] as any;
+      const [from, to] = existsOptions.where.date._value as Date[];
+      expect(from.toISOString()).toBe('2025-01-16T05:00:00.000Z');
+      expect(to.toISOString()).toBe('2025-01-17T04:59:59.999Z');
+    });
+
+    it('should allow a replacement when no live payment occupies the Lima day', async () => {
+      accountRepo.findOne.mockResolvedValue(buildAccount());
+      mockManager.exists.mockResolvedValue(false);
+
+      await expect(service.create(dto, adminActor)).resolves.toBeDefined();
+      expect(mockManager.exists).toHaveBeenCalledWith(
+        Payment,
+        expect.objectContaining({
+          where: expect.objectContaining({ accountId: dto.accountId }),
+        }),
       );
     });
 
@@ -399,6 +454,47 @@ describe('PaymentService', () => {
       await expect(
         service.update('payment-uuid-1', { amount: 50 }),
       ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should reject moving a payment into an occupied Lima day before mutating balances', async () => {
+      const account = buildAccount({ remainingBalance: 500 });
+      const payment = buildPayment({
+        amount: 100,
+        date: new Date('2025-01-14T15:00:00.000Z'),
+      });
+      paymentRepo.findOne.mockResolvedValue(payment);
+      accountRepo.findOne.mockResolvedValue(account);
+      mockManager.exists.mockResolvedValue(true);
+
+      await expect(
+        service.update('payment-uuid-1', {
+          date: new Date('2025-01-15T15:00:00.000Z'),
+        }),
+      ).rejects.toThrow(ConflictException);
+
+      expect(account.remainingBalance).toBe(500);
+      expect(payment.date.toISOString()).toBe('2025-01-14T15:00:00.000Z');
+      expect(mockManager.save).not.toHaveBeenCalled();
+    });
+
+    it('should exclude the edited payment from the daily uniqueness check', async () => {
+      const account = buildAccount({ remainingBalance: 500 });
+      const payment = buildPayment({
+        amount: 100,
+        date: new Date('2025-01-15T10:00:00.000Z'),
+      });
+      paymentRepo.findOne.mockResolvedValue(payment);
+      accountRepo.findOne.mockResolvedValue(account);
+      mockManager.exists.mockResolvedValue(false);
+
+      await service.update('payment-uuid-1', {
+        date: new Date('2025-01-15T18:00:00.000Z'),
+      });
+
+      const existsOptions = mockManager.exists.mock.calls[0][1] as any;
+      expect(existsOptions.where.id._type).toBe('not');
+      expect(existsOptions.where.id._value).toBe('payment-uuid-1');
+      expect(payment.date.toISOString()).toBe('2025-01-15T18:00:00.000Z');
     });
 
     it('should reject when new amount would push balance below 0', async () => {
