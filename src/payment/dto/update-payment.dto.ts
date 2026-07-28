@@ -1,5 +1,11 @@
 import { Type } from 'class-transformer';
-import { IsDate, IsNumber, IsOptional, IsUUID } from 'class-validator';
+import {
+  IsBoolean,
+  IsDate,
+  IsNumber,
+  IsOptional,
+  IsUUID,
+} from 'class-validator';
 
 export class UpdatePaymentDto {
   @IsOptional()
@@ -14,4 +20,8 @@ export class UpdatePaymentDto {
   @IsOptional()
   @IsNumber()
   amount?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  closeWithOverpayment?: boolean;
 }

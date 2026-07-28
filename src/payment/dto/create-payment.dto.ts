@@ -1,5 +1,12 @@
 import { Type } from 'class-transformer';
-import { IsDate, IsNotEmpty, IsNumber, IsUUID } from 'class-validator';
+import {
+  IsBoolean,
+  IsDate,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsUUID,
+} from 'class-validator';
 
 export class CreatePaymentDto {
   @IsNotEmpty()
@@ -14,4 +21,8 @@ export class CreatePaymentDto {
   @IsNotEmpty()
   @IsNumber()
   amount: number;
+
+  @IsOptional()
+  @IsBoolean()
+  closeWithOverpayment?: boolean;
 }

@@ -20,6 +20,9 @@ export class Payment extends BaseEntity implements PaymentInterface {
   @Column({ type: 'float' })
   amount: number;
 
+  @Column({ type: 'float' })
+  appliedAmount: number;
+
   @Column({ type: 'uuid' })
   accountId: string;
 

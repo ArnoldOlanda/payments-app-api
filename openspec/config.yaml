@@ -75,14 +75,14 @@ phase_rules:
   sync:
     must_update_artifacts: true
 
-artifact_store: openspec
+artifact_store: both
 skill_registry: "../.atl/skill-registry.md"
 
 strict_tdd: true
 strict_tdd_runner: "yarn test"
 execution_mode: interactive
-chained_pr_strategy: auto-forecast
-review_budget_lines: 400
+chained_pr_strategy: single-pr-default
+review_budget_lines: 500
 
 # Notes for downstream SDD agents
 notes:

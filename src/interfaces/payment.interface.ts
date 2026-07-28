@@ -5,4 +5,5 @@ export interface PaymentInterface {
   account: Account;
   date: Date;
   amount: number;
+  appliedAmount: number;
 }

@@ -14,11 +14,13 @@ export class AddUserTimezone1784800000000 implements MigrationInterface {
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(
-      `ALTER TABLE "user" ADD COLUMN "timezone" varchar(64) NOT NULL DEFAULT 'UTC'`,
+      `ALTER TABLE "user" ADD COLUMN IF NOT EXISTS "timezone" varchar(64) NOT NULL DEFAULT 'UTC'`,
     );
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`ALTER TABLE "user" DROP COLUMN "timezone"`);
+    await queryRunner.query(
+      `ALTER TABLE "user" DROP COLUMN IF EXISTS "timezone"`,
+    );
   }
 }

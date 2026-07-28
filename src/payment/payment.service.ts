@@ -74,22 +74,31 @@ export class PaymentService {
         );
       }
 
-      if (account.remainingBalance < createPaymentDto.amount) {
+      if (
+        createPaymentDto.amount > account.remainingBalance &&
+        createPaymentDto.closeWithOverpayment !== true
+      ) {
         throw new BadRequestException(
-          `El monto ${createPaymentDto.amount} es mayor que el saldo restante ${account.remainingBalance}`,
+          `Para registrar un pago mayor al saldo restante debe confirmarse el cierre del crédito`,
         );
       }
+
+      const appliedAmount = Math.min(
+        createPaymentDto.amount,
+        account.remainingBalance,
+      );
 
       const payment = manager.create(Payment, {
         accountId: createPaymentDto.accountId,
         account,
         date: createPaymentDto.date,
         amount: createPaymentDto.amount,
+        appliedAmount,
         userId: actor.id,
         user: actor,
       });
 
-      const restAmount = account.remainingBalance - createPaymentDto.amount;
+      const restAmount = account.remainingBalance - appliedAmount;
       account.remainingBalance = restAmount;
       if (restAmount === 0) {
         account.status = AccountStatus.FINISHED;
@@ -198,18 +207,25 @@ export class PaymentService {
         throw new NotFoundException(`Cuenta no encontrada`);
       }
 
-      const previousAmount = payment.amount;
-      const newAmount = updatePaymentDto.amount ?? previousAmount;
+      const previousAppliedAmount = payment.appliedAmount ?? payment.amount;
+      const newAmount = updatePaymentDto.amount ?? payment.amount;
       if (newAmount < 0) {
         throw new BadRequestException(`El monto no puede ser negativo`);
       }
 
-      const newBalance = account.remainingBalance + previousAmount - newAmount;
-      if (newBalance < 0) {
+      const availableBalance = account.remainingBalance + previousAppliedAmount;
+      if (
+        updatePaymentDto.amount !== undefined &&
+        newAmount > availableBalance &&
+        updatePaymentDto.closeWithOverpayment !== true
+      ) {
         throw new BadRequestException(
-          `El nuevo monto dejaría el saldo en negativo`,
+          'Para registrar un pago mayor al saldo restante debe confirmarse el cierre del crédito',
         );
       }
+
+      const newAppliedAmount = Math.min(newAmount, availableBalance);
+      const newBalance = availableBalance - newAppliedAmount;
       account.remainingBalance = newBalance;
       if (account.status === AccountStatus.FINISHED && newBalance > 0) {
         account.status = AccountStatus.ACTIVE;
@@ -219,6 +235,7 @@ export class PaymentService {
       }
 
       payment.amount = newAmount;
+      payment.appliedAmount = newAppliedAmount;
       if (updatePaymentDto.date !== undefined) {
         payment.date = updatePaymentDto.date;
       }
@@ -250,7 +267,7 @@ export class PaymentService {
         throw new NotFoundException(`Cuenta no encontrada`);
       }
 
-      account.remainingBalance += payment.amount;
+      account.remainingBalance += payment.appliedAmount ?? payment.amount;
       if (
         account.status === AccountStatus.FINISHED &&
         account.remainingBalance > 0

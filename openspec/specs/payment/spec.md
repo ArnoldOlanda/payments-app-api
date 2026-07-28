@@ -10,7 +10,7 @@ This specification defines the accepted behavior of the `PaymentService` exposed
 
 ### Requirement: Payment Creation
 
-The system MUST allow `ADMIN` or `PRESTAMISTA` to register a payment against an account. The system MUST accept payments against accounts in any status except `FINISHED`. The system MUST reject payments whose amount exceeds the account's `remainingBalance`.
+The system MUST allow `ADMIN` or `PRESTAMISTA` to register a payment against an account. The system MUST accept payments against accounts in any status except `FINISHED`. The system MUST require explicit overpayment intent when a payment amount exceeds the account's `remainingBalance`. Confirmed overpayments MUST persist the full payment amount, apply only the remaining balance, and finish the account.
 
 #### Scenario: Register a payment against an active account
 

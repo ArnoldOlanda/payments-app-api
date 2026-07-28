@@ -206,6 +206,21 @@ describe('PaymentService', () => {
       expect(mockManager.save).not.toHaveBeenCalled();
     });
 
+    it('should close the account with a confirmed overpayment while preserving the full payment amount', async () => {
+      const account = buildAccount({ remainingBalance: 100 });
+      accountRepo.findOne.mockResolvedValue(account);
+
+      const saved = await service.create(
+        { ...dto, amount: 125, closeWithOverpayment: true },
+        adminActor,
+      );
+
+      expect((saved as Payment).amount).toBe(125);
+      expect((saved as Payment).appliedAmount).toBe(100);
+      expect(account.remainingBalance).toBe(0);
+      expect(account.status).toBe(AccountStatus.FINISHED);
+    });
+
     it('should wrap operations in a transaction with pessimistic_write lock on the account', async () => {
       accountRepo.findOne.mockResolvedValue(
         buildAccount({ remainingBalance: 1000 }),
@@ -504,6 +519,25 @@ describe('PaymentService', () => {
         'payment-uuid-1',
       );
       expect(message).toBe('Pago eliminado con éxito');
+    });
+
+    it('should restore only appliedAmount when deleting an overpayment', async () => {
+      const account = buildAccount({
+        remainingBalance: 0,
+        status: AccountStatus.FINISHED,
+      });
+      paymentRepo.findOne.mockResolvedValue({
+        id: 'payment-uuid-1',
+        amount: 125,
+        appliedAmount: 100,
+        account: { id: 'account-uuid-1' },
+      } as any);
+      accountRepo.findOne.mockResolvedValue(account);
+
+      await service.remove('payment-uuid-1');
+
+      expect(account.remainingBalance).toBe(100);
+      expect(account.status).toBe(AccountStatus.ACTIVE);
     });
 
     it('should revert status from FINISHED to ACTIVE when refund brings balance > 0', async () => {
