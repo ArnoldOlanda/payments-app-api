@@ -74,7 +74,8 @@ export class AccountService {
   }
 
   async findAll(paginationDto: PaginateAccountDto, actor: Actor) {
-    const { zoneId, status, page, limit, collectibleToday } = paginationDto;
+    const { zoneId, status, page, limit, collectibleToday, search } =
+          paginationDto;
     const skip = (page - 1) * limit;
 
     if (!isAdmin(actor)) {
@@ -124,6 +125,16 @@ export class AccountService {
           todayStart: dayStart(new Date(), ACCOUNT_BUSINESS_TIMEZONE),
           todayEnd: dayEnd(new Date(), ACCOUNT_BUSINESS_TIMEZONE),
         },
+      );
+    }
+
+    if (search) {
+      const searchValue = `%${search}%`;
+      query.andWhere(
+        '(customer.name ILIKE :search OR ' +
+          'customer.lastName ILIKE :search OR ' +
+          'customer.documentNumber ILIKE :search)',
+        { search: searchValue },
       );
     }
 
