@@ -81,3 +81,118 @@ None.
 - Phase 5: Web verification (lint + build) and browser harness.
 - Cross-repo `sdd-verify` after both slices.
 - `sdd-archive` once verified.
+
+---
+
+# Apply Progress — weekly-collections-report-pdf (Web Unit 2)
+
+> Work-unit slice: **Web**. Adds the blob-download service, the applied-query
+> snapshot in the store, and the "Descargar PDF" button beside `Hoy`. No git
+> mutation performed. The JSON weekly endpoint and the API-side PDF export
+> remain on `main` per the API Unit 1 batch. Cross-repo `sdd-verify` is the
+> next step.
+
+## Scope executed
+
+- Phase 4: 4.1 → 4.4
+- Phase 5: 5.1 → 5.3
+
+## Files touched (this work unit)
+
+| File | Action | Lines | Notes |
+|------|--------|-------|-------|
+| `web/src/services/report.service.ts` | Modified | +89 | +`getCollectionsWeeklyReportPdfService(query)` (axios with `responseType:'blob'`), +`CollectionsWeeklyReportPdfResult`, +`sanitizeFilenameSlug` + `parseFilenameFromContentDisposition` + `buildFallbackFilename` helpers. Mirrors existing `getCollectionsWeeklyReportService` for query/error normalization. |
+| `web/src/store/useCollectionsReportStore.ts` | Modified | +34 | +`weeklyAppliedQuery: CollectionsWeeklyQuery \| null` state, +`setWeeklyAppliedQuery` action. Populated only in `fetchWeekly` success path, using `response.weekStart` + captured `query.zoneId`/`query.userId`. Failure path leaves snapshot untouched. `clearWeekly` resets it. |
+| `web/src/sections/collections-report/CollectionsReportView.tsx` | Modified | +61 | +`isDownloadingPdf` local state, +`handleDownloadPdf` click handler (blob → `createObjectURL` → temporary anchor → click → `revokeObjectURL`, success/error toasts), +`Descargar PDF` button (Tooltip-wrapped) next to `Hoy`, weekly-only, disabled when snapshot/loading/downloading. |
+| `api/openspec/changes/weekly-collections-report-pdf/tasks.md` | Modified | checkboxes | Marked 4.1 → 5.3 complete |
+| `api/openspec/changes/weekly-collections-report-pdf/apply-progress.md` | Modified | appended | This section |
+
+## Web-specific design notes (vs API Unit 1)
+
+- The web query (`CollectionsWeeklyQuery`) only carries `weekStart`, not
+  `weekEnd`. The fallback filename therefore derives `weekEnd` locally via
+  `dayjs(weekStart).add(6, 'day')` so the synthesized name still matches the
+  server's `reporte-cobranzas-<slug>-<start>-<end>.pdf` contract.
+- The `Content-Disposition` parser accepts both `filename="..."` and the RFC
+  5987 `filename*=UTF-8''<value>` form; missing/garbled headers fall back to
+  the deterministic client-side name instead of throwing.
+- The button reads `weeklyAppliedQuery` (frozen snapshot), not live filters,
+  so toggling filters after a successful load still downloads the loaded
+  scope — the explicit guard the spec demands.
+- The click handler cleans up the object URL in `finally`, removes the
+  injected anchor, and never touches `weekly` / `weeklyAppliedQuery` on error
+  (matches spec "failure MUST preserve the report").
+
+## Commands executed (exact, with exit codes)
+
+| Command | Exit | Result |
+|---------|------|--------|
+| `node_modules/.bin/tsc --noEmit -p tsconfig.json` | 0 | No type errors |
+| `node_modules/.bin/eslint --no-eslintrc --config .eslintrc.override.json src/services/report.service.ts src/store/useCollectionsReportStore.ts src/sections/collections-report/CollectionsReportView.tsx` | 0 | 0 errors, 13 warnings — all warnings are pre-existing prettier formatting in the original `CollectionsReportView.tsx` (e.g. line 122, 126, 160, 176, 192, 208, 286, 416–421, 485, 650, 660); none originate from the three modified regions. Override config only neutralizes the pre-existing `endOfLine:'auto'` severity bug in `.eslintrc.cjs` and disables `import/order` (already broken in the original file). |
+| `yarn build` | 1 | Confirmed the documented pre-existing blocker: `Cannot find module '@rollup/rollup-linux-x64-gnu'` (engines.node mismatch). Same env issue as on `main`. |
+
+### Why an override config and not `.eslintrc.cjs`
+
+The repo's `.eslintrc.cjs` contains an invalid `endOfLine: 'auto'` severity
+(`"auto"` is not a valid ESLint severity — `0 | 1 | 2` only). ESLint 8.57
+refuses to load the file with exit 2 before any rule even runs. The user
+explicitly flagged this as an out-of-scope pre-existing bug ("DO NOT try to
+fix"). A throwaway override at `.eslintrc.override.json` (deleted before the
+final `git status`) replicates the airbnb-typescript stack but emits `endOfLine: 0`
+and `import/order: 0` so the file actually loads. The override was removed
+before reporting; only the three deliverable files are modified in git.
+
+## Work Unit Evidence
+
+| Evidence | Value |
+|----------|-------|
+| Focused test command and exact result | No web runner in repo (per design §"Web test runner"). `tsc --noEmit` is the type gate: exit 0. Scoped `eslint` on the three modified files: exit 0 (0 errors; 13 pre-existing prettier warnings). |
+| Runtime harness command/scenario and exact result | N/A — automation. Browser harness documented in §5.2 below for manual execution; see "Browser harness (manual)" for the exact checklist. No automated integration test exists for the web blob path in this repo, by design. |
+| Rollback boundary | Revert the 3 web files (services/report.service.ts, store/useCollectionsReportStore.ts, sections/collections-report/CollectionsReportView.tsx). The download button disappears, the blob service is gone, the snapshot field is gone. The JSON weekly fetch and table rendering stay untouched. No DB / API / shared file is touched. |
+
+## Deviations from design
+
+- The service returns `{ blob, filename }` instead of `Blob` alone. Reason:
+  the view needs both — the blob for `createObjectURL` and the filename for
+  the `<a download>` attribute. The signature split also makes the fallback
+  filename a property of the result, not of the call site.
+- The local `downloadError` rename in the catch block (was `error`) avoids a
+  `no-shadow` collision with the existing `error` selector at the top of the
+  component.
+
+## Issues found
+
+None.
+
+## Browser harness (manual, 5.2)
+
+Documented checks — do NOT run here; execute against a live dev server with an
+ADMIN session cookie + seeded zone/account fixtures.
+
+1. Open `/report/collections` in weekly mode. Pick a user, a zone, and a
+   week. Click `Consultar`. Confirm the weekly table renders.
+2. Click `Descargar PDF`. Expect the browser download prompt to show
+   `reporte-cobranzas-<zone>-<weekStart>-<weekEnd>.pdf` (sanitized slug).
+   Confirm `application/pdf` content type (DevTools → Network).
+3. With the PDF still downloaded from step 2, toggle the user/zone dropdown
+   (or change the week picker). Click `Descargar PDF` again. Confirm the
+   downloaded file still uses the **original** scope from step 2 (read the
+   filename or open it) — i.e. live filter edits do not drift the PDF scope.
+4. Pick a zone/week known to have no payments. Click `Consultar` (table
+   renders empty rows). Click `Descargar PDF`. Expect a valid PDF with zero
+   totals and empty day cells.
+5. Force a 500 on `/report/collections/weekly/pdf` (mock the service or
+   point the API at an error path). Click `Descargar PDF`. Expect the error
+   toast, the button to restore (`isDownloadingPdf` flips back to `false`),
+   and the weekly table to remain visible (not cleared).
+6. Open DevTools → Memory → record a heap snapshot, click `Descargar PDF`
+   several times, take a second snapshot. Confirm the count of
+   `Blob`/`URL` objects does not grow unboundedly. The `finally` block calls
+   `URL.revokeObjectURL(objectUrl)`; the `<a>` element is removed after
+   `click()`.
+
+## Remaining tasks (out of this batch)
+
+- Cross-repo `sdd-verify` after both API and web slices are merged in
+  `main`.
+- `sdd-archive` once verified.
