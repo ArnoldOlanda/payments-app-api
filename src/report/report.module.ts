@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { ReportService } from './report.service';
 import { CollectionsReportService } from './collections-report.service';
 import { CollectionsWeeklyReportService } from './collections-weekly-report.service';
+import { CollectionsWeeklyPdfService } from './collections-weekly-pdf.service';
 import { ReportController } from './report.controller';
 import { PrinterModule } from '../printer/printer.module';
 import { UserModule } from 'src/user/user.module';
@@ -16,6 +17,7 @@ import { Payment } from 'src/payment/entities/payment.entity';
     ReportService,
     CollectionsReportService,
     CollectionsWeeklyReportService,
+    CollectionsWeeklyPdfService,
   ],
   imports: [
     TypeOrmModule.forFeature([Payment, Account]),
