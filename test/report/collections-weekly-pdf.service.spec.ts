@@ -106,7 +106,7 @@ describe('CollectionsWeeklyPdfService', () => {
     expect(createPdf).toHaveBeenCalledTimes(1);
     const docDef = createPdf.mock.calls[0][0];
     expect(docDef).toBeDefined();
-    expect(docDef.pageOrientation).toBe('portrait');
+    expect(docDef.pageOrientation).toBe('landscape');
   });
 
   it('resolves the zone through ZoneService.findOne with the queried zoneId', async () => {
