@@ -140,7 +140,9 @@ function expectedWeekdayLabels(
   tz: string,
 ): string[] {
   return data.days.map((d) =>
-    capitalize(tempoFormat({ date: parseDay(d.date), format: 'ddd DD', tz })),
+    capitalize(
+      tempoFormat({ date: parseDay(d.date), format: 'ddd DD', locale: 'es-ES', tz }),
+    ),
   );
 }
 
@@ -215,13 +217,13 @@ describe('collectionsWeeklyPdf — pure template', () => {
       const dayCells = accountRow.slice(7, 14);
       expect(dayCells).toHaveLength(7);
 
-      expect(dayCells[0]).toBe('S/ 100.00');
-      expect(dayCells[1]).toBe('—');
-      expect(dayCells[2]).toBe('S/ 50.00');
-      expect(dayCells[3]).toBe('—');
-      expect(dayCells[4]).toBe('—');
-      expect(dayCells[5]).toBe('S/ 200.00');
-      expect(dayCells[6]).toBe('—');
+      expect(cellText(dayCells[0])).toBe('S/\u00A0100.00');
+      expect(cellText(dayCells[1])).toBe('—');
+      expect(cellText(dayCells[2])).toBe('S/\u00A050.00');
+      expect(cellText(dayCells[3])).toBe('—');
+      expect(cellText(dayCells[4])).toBe('—');
+      expect(cellText(dayCells[5])).toBe('S/\u00A0200.00');
+      expect(cellText(dayCells[6])).toBe('—');
     });
 
     it('places the weekly total in the last column of the account row', () => {
@@ -232,7 +234,7 @@ describe('collectionsWeeklyPdf — pure template', () => {
         tz: 'UTC',
       });
       const accountRow = findTable(doc).body[1];
-      expect(accountRow[14]).toBe('S/ 350.00');
+      expect(cellText(accountRow[14])).toBe('S/\u00A0350.00');
     });
   });
 
@@ -250,15 +252,15 @@ describe('collectionsWeeklyPdf — pure template', () => {
       expect(totalsRow).toHaveLength(15);
       const dayCellTexts = totalsRow.slice(7, 14).map(cellText);
       expect(dayCellTexts).toEqual([
-        'S/ 100.00',
-        'S/ 0.00',
-        'S/ 50.00',
-        'S/ 0.00',
-        'S/ 0.00',
-        'S/ 200.00',
-        'S/ 0.00',
+        'S/\u00A0100.00',
+        'S/\u00A00.00',
+        'S/\u00A050.00',
+        'S/\u00A00.00',
+        'S/\u00A00.00',
+        'S/\u00A0200.00',
+        'S/\u00A00.00',
       ]);
-      expect(cellText(totalsRow[14])).toBe('S/ 350.00');
+      expect(cellText(totalsRow[14])).toBe('S/\u00A0350.00');
     });
   });
 
@@ -284,9 +286,9 @@ describe('collectionsWeeklyPdf — pure template', () => {
       const totalsRow = table.body[1];
       expect(totalsRow).toHaveLength(15);
       for (let i = 7; i < 14; i++) {
-        expect(cellText(totalsRow[i])).toBe('S/ 0.00');
+        expect(cellText(totalsRow[i])).toBe('S/\u00A00.00');
       }
-      expect(cellText(totalsRow[14])).toBe('S/ 0.00');
+      expect(cellText(totalsRow[14])).toBe('S/\u00A00.00');
     });
   });
 
@@ -345,8 +347,8 @@ describe('sanitizeFilenameSlug', () => {
 
 describe('formatPEN', () => {
   it('formats positive amounts in es-PE locale with two decimal places and the S/ prefix', () => {
-    expect(formatPEN(100)).toBe('S/ 100.00');
-    expect(formatPEN(1234.5)).toBe('S/ 1,234.50');
-    expect(formatPEN(0)).toBe('S/ 0.00');
+    expect(formatPEN(100)).toBe('S/\u00A0100.00');
+    expect(formatPEN(1234.5)).toBe('S/\u00A01,234.50');
+    expect(formatPEN(0)).toBe('S/\u00A00.00');
   });
 });

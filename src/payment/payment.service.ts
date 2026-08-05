@@ -185,6 +185,7 @@ export class PaymentService {
     return this.paymentRepository.find({
       where: { account: { id: accountId } },
       relations: ['user'],
+      order: { date: 'DESC', createdAt: 'DESC' },
     });
   }
 

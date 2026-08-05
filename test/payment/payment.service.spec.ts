@@ -673,6 +673,7 @@ describe('PaymentService', () => {
       expect(paymentRepo.find).toHaveBeenCalledWith({
         where: { account: { id: 'account-uuid-1' } },
         relations: ['user'],
+        order: { date: 'DESC', createdAt: 'DESC' },
       });
     });
 

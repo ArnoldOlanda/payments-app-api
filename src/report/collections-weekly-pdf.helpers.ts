@@ -35,9 +35,13 @@ export function sanitizeFilenameSlug(input: string): string {
 /**
  * Format a numeric amount in Peruvian soles with two decimal places and the
  * `S/` prefix. Uses the es-PE locale so the thousands separator is `,`.
+ *
+ * The space between `S/` and the number is a non-breaking space (U+00A0)
+ * so that pdfmake cannot wrap the currency mark away from its value when
+ * the column width is tight (Monto / Restante / day cells).
  */
 export function formatPEN(amount: number): string {
-  return `S/ ${amount.toLocaleString('es-PE', {
+  return `S/\u00A0${amount.toLocaleString('es-PE', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`;

@@ -39,7 +39,7 @@ function parseDayUtcNoon(day: string): Date {
 
 function formatDayLabel(day: string, tz: string): string {
   return capitalize(
-    tempoFormat({ date: parseDayUtcNoon(day), format: 'ddd DD', tz }),
+    tempoFormat({ date: parseDayUtcNoon(day), format: 'ddd DD', locale: 'es-ES', tz }),
   );
 }
 
@@ -47,11 +47,36 @@ function dayCellText(amount: number | null): string {
   return amount === null ? '—' : formatPEN(amount);
 }
 
+/**
+ * Wrap every cell of a row so pdfmake treats the row as unbreakable.
+ *
+ * If any cell in the row would not fit on the remaining space of the
+ * current page, pdfmake moves the entire row to the next page instead of
+ * splitting it across the page break. This is what prevents the visual
+ * artifact where a credit row is cut mid-row and the next page shows the
+ * tail of it.
+ *
+ * Header rows are not wrapped here: they are already protected by
+ * `headerRows: 1` (the header repeats on every page and is never split).
+ */
+function makeRowUnbreakable(row: any[]): any[] {
+  return row.map((cell) => {
+    if (cell === null || cell === undefined) return cell;
+    if (typeof cell === 'string') {
+      return { text: cell, unbreakable: true };
+    }
+    if (typeof cell === 'object') {
+      return { ...cell, unbreakable: true };
+    }
+    return cell;
+  });
+}
+
 function formatDateOrDash(isoDate: string | null, tz: string): string {
   if (!isoDate) return '—';
   const d = new Date(isoDate);
   if (Number.isNaN(d.getTime())) return '—';
-  return tempoFormat({ date: d, format: 'DD/MM/YYYY', tz });
+  return tempoFormat({ date: d, format: 'DD/MM/YYYY', locale: 'es-ES', tz });
 }
 
 /**
@@ -72,15 +97,15 @@ export const collectionsWeeklyPdf = (
   const lastDay = data.days[data.days.length - 1]?.date;
   const weekRangeText =
     firstDay && lastDay
-      ? `${tempoFormat({ date: parseDayUtcNoon(firstDay), format: 'D', tz })}-${tempoFormat(
-          { date: parseDayUtcNoon(lastDay), format: 'D', tz },
+      ? `${tempoFormat({ date: parseDayUtcNoon(firstDay), format: 'D', locale: 'es-ES', tz })}-${tempoFormat(
+          { date: parseDayUtcNoon(lastDay), format: 'D', locale: 'es-ES', tz },
         )} de ${capitalize(
-          tempoFormat({ date: parseDayUtcNoon(firstDay), format: 'MMMM', tz }),
-        )} de ${tempoFormat({ date: parseDayUtcNoon(firstDay), format: 'YYYY', tz })}`
+          tempoFormat({ date: parseDayUtcNoon(firstDay), format: 'MMMM', locale: 'es-ES', tz }),
+        )} de ${tempoFormat({ date: parseDayUtcNoon(firstDay), format: 'YYYY', locale: 'es-ES', tz })}`
       : '';
 
   return {
-    pageOrientation: 'portrait',
+    pageOrientation: 'landscape',
     pageSize: 'A4',
     info: { title: 'Reporte Semanal de Cobranzas' },
     header: {
@@ -94,7 +119,7 @@ export const collectionsWeeklyPdf = (
         alignment: 'center',
         bold: true,
         fontSize: 16,
-        margin: [0, 10, 0, 20],
+        margin: [0, 5, 0, 20],
       },
       {
         columns: [
@@ -113,7 +138,7 @@ export const collectionsWeeklyPdf = (
         ],
       },
       {
-        margin: [0, 10],
+        margin: [0, 5],
         fontSize: 8,
         table: {
           headerRows: 1,
@@ -130,17 +155,19 @@ export const collectionsWeeklyPdf = (
               ...weekdayHeaders,
               'Total sem.',
             ],
-            ...data.rows.map((row, idx) => [
-              idx + 1,
-              `${row.customer.lastName} ${row.customer.name}`.trim(),
-              row.creditType,
-              formatDateOrDash(row.accountDate, tz),
-              formatDateOrDash(row.dueDate, tz),
-              formatPEN(row.amount),
-              formatPEN(row.remainingBalance),
-              ...row.days.map((d) => dayCellText(d.amount)),
-              formatPEN(row.weeklyTotal),
-            ]),
+            ...data.rows.map((row, idx) =>
+              makeRowUnbreakable([
+                idx + 1,
+                `${row.customer.lastName} ${row.customer.name}`.trim(),
+                row.creditType,
+                formatDateOrDash(row.accountDate, tz),
+                formatDateOrDash(row.dueDate, tz),
+                formatPEN(row.amount),
+                formatPEN(row.remainingBalance),
+                ...row.days.map((d) => dayCellText(d.amount)),
+                formatPEN(row.weeklyTotal),
+              ]),
+            ),
             // Footer row: "Totales" label across the first 7 columns,
             // then one cell per day + grand total. The 7 empty cells are
             // required by pdfmake to render a 15-column row.
